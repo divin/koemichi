@@ -1,0 +1,36 @@
+name: koemichi
+
+services:
+  ingest:
+    image: ghcr.io/divin/koemichi:latest
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?Set WEBHOOK_TOKEN in .env}
+      STT_URL: ${STT_URL:?Set STT_URL in .env}
+      STT_MODEL_NAME: ${STT_MODEL_NAME:?Set STT_MODEL_NAME in .env}
+      DATA_DIR: /data
+      NOTIFICATION_MODE: ${NOTIFICATION_MODE:-normal}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/divin/koemichi:latest
+    command: ["python", "-m", "koemichi.services.worker"]
+    environment:
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?Set WEBHOOK_TOKEN in .env}
+      STT_URL: ${STT_URL:?Set STT_URL in .env}
+      STT_MODEL_NAME: ${STT_MODEL_NAME:?Set STT_MODEL_NAME in .env}
+      LLM_URL: ${LLM_URL:-}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-}
+      DATA_DIR: /data
+      NOTIFICATION_MODE: ${NOTIFICATION_MODE:-normal}
+      PUSHOVER_API_TOKEN: ${PUSHOVER_API_TOKEN:-}
+      PUSHOVER_USER_KEY: ${PUSHOVER_USER_KEY:-}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+    restart: unless-stopped

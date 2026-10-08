@@ -1,0 +1,40 @@
+# Git and editor metadata
+.git/
+.github/
+.DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+*.env
+
+# Runtime data and databases
+/data/
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Python environments and caches
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+.uv-cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# Test and coverage artifacts
+tests/
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

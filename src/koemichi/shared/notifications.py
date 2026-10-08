@@ -46,7 +46,8 @@ class NotificationDraft:
     debug_message : str or None
         Optional diagnostic version used only in debug mode.
     debug_priority : int or None
-        Optional Pushover priority override for the debug message.
+        Optional Pushover priority override for the debug message. Debug details
+        default to low priority (-1) when no override is provided.
     debug_only : bool
         Whether the event should be suppressed outside debug mode.
     """
@@ -309,6 +310,7 @@ def failure_notification(
             f"Voice note [{short_id}] failed during {stage} after "
             f"{attempt_count} attempts ({error_type})."
         ),
+        debug_priority=1,
     )
 
 
@@ -342,8 +344,7 @@ def enqueue_notification(
     priority = draft.priority
     if NOTIFICATION_MODE is NotificationMode.DEBUG and draft.debug_message is not None:
         message = draft.debug_message
-        if draft.debug_priority is not None:
-            priority = draft.debug_priority
+        priority = draft.debug_priority if draft.debug_priority is not None else -1
 
     event = NotificationOutbox(
         note_id=note_id,

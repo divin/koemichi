@@ -73,25 +73,15 @@ def _notes(engine: Engine) -> list[Note]:
         return list(session.exec(select(Note)).all())
 
 
-@pytest.mark.parametrize(
-    ("endpoint", "source", "storage_subdirectory"),
-    [
-        ("/memo", NoteSource.MEMO, "memos"),
-        ("/action", NoteSource.ACTION, "actions"),
-    ],
-)
 def test_audio_is_saved_and_note_is_persisted(
     client: TestClient,
     database_engine: Engine,
     storage_root: Path,
-    endpoint: str,
-    source: NoteSource,
-    storage_subdirectory: str,
 ) -> None:
     payload = b"audio test payload"
     recorded_at = 1_700_000_000_000
     response = client.post(
-        endpoint,
+        "/memo",
         headers=_headers(**{"X-Audio-Size": str(len(payload))}),
         data={
             "recordedAt": str(recorded_at),
@@ -105,11 +95,11 @@ def test_audio_is_saved_and_note_is_persisted(
     notes = _notes(database_engine)
     assert len(notes) == 1
     note = notes[0]
-    assert note.source == source
+    assert note.source == NoteSource.MEMO
     assert note.status == NoteStatus.RECEIVED
     assert note.recorded_at_ms == recorded_at
     assert note.transcript == "A test transcript"
-    assert note.audio_key.startswith(f"{storage_subdirectory}/")
+    assert note.audio_key.startswith("memos/")
     with Session(database_engine) as session:
         notifications = session.exec(select(NotificationOutbox)).all()
     assert len(notifications) == 1
@@ -144,14 +134,32 @@ def test_invalid_bearer_token_is_rejected_without_persisting_data(
     assert list(storage_root.rglob("*.m4a")) == []
 
 
-@pytest.mark.parametrize("endpoint", ["/memo", "/action"])
+def test_action_endpoint_is_deprecated_without_processing_upload(
+    client: TestClient,
+    database_engine: Engine,
+    storage_root: Path,
+) -> None:
+    response = client.post(
+        "/action",
+        headers=_headers(),
+        data={"recordedAt": "1700000000000", "client": "unit-test-client"},
+        files={"audio": ("recording.m4a", b"audio", "audio/mp4")},
+    )
+
+    assert response.status_code == 410
+    assert response.json() == {"detail": "The /action endpoint is deprecated"}
+    assert _notes(database_engine) == []
+    with Session(database_engine) as session:
+        assert session.exec(select(NotificationOutbox)).all() == []
+    assert list(storage_root.rglob("*.m4a")) == []
+
+
 def test_missing_audio_is_rejected_without_persisting_a_note(
     client: TestClient,
     database_engine: Engine,
-    endpoint: str,
 ) -> None:
     response = client.post(
-        endpoint,
+        "/memo",
         headers=_headers(),
         data={"recordedAt": "1700000000000", "client": "unit-test-client"},
     )
@@ -161,18 +169,16 @@ def test_missing_audio_is_rejected_without_persisting_a_note(
     assert _notes(database_engine) == []
 
 
-@pytest.mark.parametrize("endpoint", ["/memo", "/action"])
 def test_oversized_audio_returns_413_and_queues_notification(
     client: TestClient,
     database_engine: Engine,
     storage_root: Path,
-    endpoint: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(ingest_main, "MAX_AUDIO_SIZE_BYTES", 4)
     payload = b"audio is too large"
     response = client.post(
-        endpoint,
+        "/memo",
         headers=_headers(),
         data={"recordedAt": "1700000000000", "client": "unit-test-client"},
         files={"audio": ("recording.m4a", payload, "audio/mp4")},
@@ -190,16 +196,14 @@ def test_oversized_audio_returns_413_and_queues_notification(
     assert notifications[0].dedupe_key.startswith("oversized-upload:")
 
 
-@pytest.mark.parametrize("endpoint", ["/memo", "/action"])
 def test_audio_size_mismatch_is_rejected_and_file_removed(
     client: TestClient,
     database_engine: Engine,
     storage_root: Path,
-    endpoint: str,
 ) -> None:
     payload = b"audio test payload"
     response = client.post(
-        endpoint,
+        "/memo",
         headers=_headers(**{"X-Audio-Size": "1"}),
         data={"recordedAt": "1700000000000", "client": "unit-test-client"},
         files={"audio": ("recording.m4a", payload, "audio/mp4")},

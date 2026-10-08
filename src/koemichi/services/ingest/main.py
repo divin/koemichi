@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, File, Form, Header, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from sqlmodel import Session
 
@@ -19,7 +19,7 @@ from koemichi.shared.notifications import (
 )
 from koemichi.shared.settings import AUDIO_STORAGE_ROOT
 
-from .audio import is_same_size, save_action_audio, save_memo_audio
+from .audio import is_same_size, save_memo_audio
 from .token import verify_token
 
 logger = logging.getLogger(__name__)
@@ -237,85 +237,13 @@ def receive_memo(
     return JSONResponse(status_code=202, content={"status": "accepted"})
 
 
-@app.post("/action", dependencies=[Depends(verify_token)])
-def receive_action(
-    audio: UploadFile | None = File(None),  # noqa: B008
-    transcription: str | None = Form(None),
-    recordedAt: int = Form(...),
-    client: str = Form(...),
-    authorization: str | None = Header(None),
-    x_audio_size: int | None = Header(None),
-    session: Session = Depends(get_session),  # noqa: B008
-) -> JSONResponse:
-    """Accept an action webhook and save its optional audio upload.
-
-    Parameters
-    ----------
-    audio : UploadFile or None
-        Uploaded action audio; required for a successful request.
-    transcription : str or None
-        Optional transcript supplied by the client.
-    recordedAt : int
-        Recording timestamp in milliseconds since the Unix epoch.
-    client : str
-        Identifier for the submitting client.
-    authorization : str or None
-        Authorization header. Authentication is enforced by ``verify_token``.
-    x_audio_size : int or None
-        Optional expected audio size in bytes.
-    session : Session
-        Database session used to persist the note.
-
-    Returns
-    -------
-    JSONResponse
-        202 when accepted, 400 when the audio size mismatches, or 422 when
-        audio is missing.
+@app.post("/action", dependencies=[Depends(verify_token)], deprecated=True)
+def receive_action() -> None:
+    """Reject use of the deprecated action webhook.
 
     Raises
     ------
     HTTPException
-        If the Bearer token is missing or invalid.
-    OSError
-        If the uploaded audio cannot be saved or inspected.
+        Always with HTTP 410 after authentication succeeds.
     """
-    logger.info(
-        "Received /action from client=%r recordedAt=%d audio=%s",
-        client,
-        recordedAt,
-        audio is not None,
-    )
-
-    note_id = uuid4()
-    audio_file = None
-    if audio is not None:
-        oversized_response = _reject_oversized_audio(session, audio)
-        if oversized_response is not None:
-            return oversized_response
-        audio_file = save_action_audio(recordedAt, audio, note_id)
-        logger.info(
-            "Saved /action audio to %s (%d bytes)",
-            audio_file,
-            audio_file.stat().st_size,
-        )
-        if not is_same_size(audio_file, x_audio_size):
-            return JSONResponse(
-                status_code=400,
-                content={"status": "error", "detail": "Audio size mismatch"},
-            )
-    else:
-        logger.warning("Rejecting /action without audio")
-        return JSONResponse(
-            status_code=422,
-            content={"status": "error", "detail": "Audio is required"},
-        )
-
-    _persist_note(
-        session,
-        note_id=note_id,
-        source=NoteSource.ACTION,
-        recorded_at=recordedAt,
-        transcription=transcription,
-        audio_file=audio_file,
-    )
-    return JSONResponse(status_code=202, content={"status": "accepted"})
+    raise HTTPException(status_code=410, detail="The /action endpoint is deprecated")

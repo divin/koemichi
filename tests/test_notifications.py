@@ -99,6 +99,51 @@ def test_notification_policy_filters_debug_events(
     assert any("transcription" in event.message for event in debug_events)
 
 
+def test_debug_detail_messages_use_low_priority_and_errors_stay_urgent(
+    database_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    normal_note = _create_note(database_engine)
+    debug_note = _create_note(database_engine)
+    failed_note = _create_note(database_engine)
+
+    monkeypatch.setattr(notifications, "NOTIFICATION_MODE", NotificationMode.NORMAL)
+    with Session(database_engine) as session:
+        notifications.enqueue_notification(
+            session,
+            normal_note.id,
+            notifications.transcribed_notification(normal_note.id, 2.5, "test-model"),
+        )
+        session.commit()
+
+    normal_event = _outbox_events(database_engine, normal_note.id)[0]
+    assert normal_event.priority == 0
+    assert normal_event.message == f"Voice note transcribed [{normal_note.id.hex[:8]}]."
+
+    monkeypatch.setattr(notifications, "NOTIFICATION_MODE", NotificationMode.DEBUG)
+    with Session(database_engine) as session:
+        notifications.enqueue_notification(
+            session,
+            debug_note.id,
+            notifications.transcribed_notification(debug_note.id, 2.5, "test-model"),
+        )
+        notifications.enqueue_notification(
+            session,
+            failed_note.id,
+            notifications.failure_notification(
+                failed_note.id, "dispatch", 3, "RuntimeError"
+            ),
+        )
+        session.commit()
+
+    debug_event = _outbox_events(database_engine, debug_note.id)[0]
+    assert debug_event.priority == -1
+    assert "in 2.5s using test-model" in debug_event.message
+
+    failure_event = _outbox_events(database_engine, failed_note.id)[0]
+    assert failure_event.priority == 1
+    assert "after 3 attempts (RuntimeError)" in failure_event.message
+
+
 def test_off_mode_does_not_enqueue_notifications(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:

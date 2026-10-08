@@ -24,6 +24,12 @@ This design is intended for one host and one worker. Do not run multiple worker 
 
 This repository contains the Python services and deployment files. Webhook workflows (including n8n workflow definitions) are external dependencies and are not included here. The configured webhook must accept the dispatch payload described below.
 
+### Example self-hosted AI services
+
+For my setup, speech recognition is provided by the CPU Docker container from [`audio.cpp`](https://github.com/0xShug0/audio.cpp), using the [Qwen3-ASR-1.7B GGUF model](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/main/Qwen3-ASR-1.7B-GGUF). I use a separate Docker container running [`llama.cpp`](https://github.com/ggml-org/llama.cpp) as the OpenAI-compatible LLM endpoint for intent-classification fallback. Configure `STT_URL` and `STT_MODEL_NAME` for the ASR container, and `LLM_URL` and `LLM_MODEL_NAME` for the llama.cpp server.
+
+These are my deployment choices, not bundled Koemichi dependencies; other compatible ASR and LLM services can be used instead.
+
 ## Requirements and configuration
 
 For Compose, create a local environment file from the sample:
@@ -66,12 +72,12 @@ The API is bound to `127.0.0.1:8000`; the worker has no published port. Both con
 
 ## Webhook API
 
-Both endpoints require `Authorization: Bearer <WEBHOOK_TOKEN>` and multipart form data:
+Both endpoints require `Authorization: Bearer <WEBHOOK_TOKEN>`. `/memo` accepts multipart form data:
 
 - `POST /memo` stores audio under `memos/`.
-- `POST /action` stores audio under `actions/`.
+- `POST /action` is marked deprecated and returns HTTP `410 Gone` until I find a use case for an additional endpoint; uploaded data is not processed.
 
-Required form fields are `audio` (recording file), `recordedAt` (Unix timestamp in milliseconds), and `client` (client identifier). `transcription` is optional. The optional `X-Audio-Size` header checks that the stored file matches the client-reported byte count; it is not the upload-size security limit.
+For `/memo`, required form fields are `audio` (recording file), `recordedAt` (Unix timestamp in milliseconds), and `client` (client identifier). `transcription` is optional. The optional `X-Audio-Size` header checks that the stored file matches the client-reported byte count; it is not the upload-size security limit.
 
 Example upload:
 
@@ -101,7 +107,7 @@ The service sends this JSON payload to the configured webhook:
 }
 ```
 
-`note_id` remains stable across dispatch retries so the receiver can deduplicate side effects. The receiving workflow is responsible for handling this contract and its downstream actions.
+`note_id` remains stable across dispatch retries so the receiver can deduplicate side effects. The receiving workflow is responsible for handling this contract and its downstream actions. Since the selected intent is included in every dispatch, an external workflow (for example, n8n) can branch into different behavior for journal, todo, memo, research, or other notes. This lets me adjust how voice notes are handled mostly by changing workflow configuration, without much change to Koemichi's code.
 
 ## Notifications and privacy
 
@@ -110,7 +116,7 @@ Create a Pushover application to obtain an application API token, and configure 
 | Mode | Notifications |
 |---|---|
 | `normal` | Priority 0 when a note is received, transcribed, and dispatched with its intent; priority 1 for terminal processing errors. |
-| `debug` | Normal lifecycle messages plus low-priority stage, retry, and recovery details. Completion messages can include provider/timing and classifier-path details. |
+| `debug` | Lifecycle messages plus low-priority (`-1`) stage, retry, recovery, and detailed transcription/dispatch notifications; terminal processing errors remain priority 1. |
 | `off` | No notifications are queued or delivered; Pushover credentials are not required. |
 
 Routine Pushover messages do not include the full transcript. Debug messages contain limited operational details, not the transcript. Notifications may appear on a lock screen, so treat them as private data. Audio and transcripts are sent to the configured ASR service; transcripts may be sent to the classifier LLM and are sent with their intent to the dispatch webhook. Choose those services with these data flows in mind.

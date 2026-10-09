@@ -1,28 +1,28 @@
 # Koemichi 🎙️
 
-**A private voice-note pipeline for one user on one host.** Upload a recording and Koemichi stores it, transcribes and classifies it, sends the result to your chosen webhook, and reports progress through Pushover.
+**A private voice-note pipeline for the [Pebble Index](https://repebble.com/index).** Koemichi receives a recording, stores it, transcribes and classifies it, sends the result to your chosen webhook, and reports progress through Pushover. The goal is to preserve your ownership and control of recordings and transcripts, rather than require a third-party cloud platform; you choose the services that process and receive your data.
 
 The name is a Japanese-inspired play on *koe* (声, “voice”) and *michi* (道, “path” or “road”): a voice route for routing my commands.
 
 ## 🧭 How it works
 
-```text
-Audio client
-    │ authenticated multipart upload
-    ▼
-FastAPI ingest ──► audio files + note state in SQLite
-                            │
-                            ▼
-                    single SQLite worker
-                    ├── transcription ──► configured ASR service
-                    ├── classification ──► keyword match, then LLM fallback
-                    ├── dispatch ────────► configured HTTP POST webhook
-                    └── notifications ──► Pushover outbox
+```mermaid
+flowchart TD
+    A[ Pebble Index or other audio client ] -->|Authenticated multipart upload| B[FastAPI ingest]
+    B -->|Store recording and note state| C[(Audio files and SQLite)]
+    C -->|Pending notes| D[Single SQLite worker]
+    D -->|Audio| E[Configured ASR service]
+    E -->|Transcript| F[Keyword classification]
+    F -->|Keyword match| G[Intent]
+    F -->|No match| H[Optional LLM fallback]
+    H --> G
+    G --> I[Configured HTTP POST webhook]
+    D --> K[Pushover outbox]
+    K --> L[Pushover]
 ```
 
 The API and worker are separate processes built from the same image and share persistent storage. A single SQLite worker handles note processing and retries; a separate outbox keeps notification delivery failures from blocking notes. There is no Redis or general-purpose task broker.
 
-**Designed for one host and one worker.** Do not run multiple worker replicas or put the SQLite database on a network filesystem.
 
 The speech-to-text service, optional LLM, and webhook receiver are external integrations. The webhook must accept the HTTP POST payload described below.
 
@@ -81,6 +81,8 @@ The API is bound to `127.0.0.1:8000`; the worker has no published port. Both con
 | `POST /action` | Bearer token | Deprecated; returns `410 Gone` without processing the upload. |
 
 For `POST /memo`, send multipart form data with `recordedAt` (Unix timestamp in milliseconds) and `client` (client identifier); real memo uploads must also include `audio` (the recording file). `transcription` is optional. The optional `X-Audio-Size` header checks that the stored file matches the client-reported byte count; it is not the upload-size security limit. An authenticated request with the required form fields but no audio is acknowledged with `200 {"status":"test_event"}` and does not create a note. This supports senders that issue audio-less test events, but it only checks webhook reachability—not transcription or downstream dispatch.
+
+**Pebble Index requires an externally reachable HTTPS webhook URL.** Serving Koemichi only on localhost or your local network is not enough; expose the API through a TLS-terminating reverse proxy and configure its HTTPS URL for Pebble. The localhost URL in the example below is for local testing only.
 
 Example upload:
 
@@ -147,6 +149,10 @@ docker compose start ingest worker
 
 Do not copy only `koemichi.db` while services are running; committed data may still be in the WAL file. Use SQLite's online backup mechanism for live backups.
 
+## ⚠️ Deployment limitations
+
+Koemichi is intended for a single-user deployment on one host with one worker. Do not run multiple worker replicas or put the SQLite database on a network filesystem.
+
 ## 🔒 Internet-facing deployments
 
 Compose binds the API to loopback. If exposing it through a reverse proxy:
@@ -160,13 +166,11 @@ The proxy is not bundled or configured here. Do not publish SQLite, ASR, LLM, or
 
 ## 🧪 Development checks
 
-With Python 3.12 and `uv` installed:
+With Python 3.12, `uv`, and [`just`](https://just.systems/man/en/) installed:
 
 ```sh
 uv sync --dev
-uv run pytest
-uv run ty check .
-uv run ruff format --check .
-uv run ruff check --extend-ignore I .
-uv run ruff check --select I .
+just        # Format, lint, and sort imports
+just check  # Type-check and run non-mutating checks
+just test   # Run the test suite
 ```

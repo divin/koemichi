@@ -50,6 +50,8 @@ Edit `.env` with values for your environment. The sample token is a placeholder.
 | `LLM_URL` | Worker | OpenAI-compatible API base URL used for intent fallback. |
 | `LLM_MODEL_NAME` | Worker | Model used for intent fallback. |
 | `DISPATCH_WEBHOOK_URL` | Worker | HTTP endpoint to receive classified-note POST requests. |
+| `DISPATCH_WEBHOOK_AUTH_HEADER` | No | Optional header name for authenticating the dispatch request. Set together with `DISPATCH_WEBHOOK_AUTH_VALUE`. |
+| `DISPATCH_WEBHOOK_AUTH_VALUE` | No | Optional value for the dispatch authentication header; supports Bearer, Basic, or API-key headers. |
 | `NOTIFICATION_MODE` | No | `normal` by default; supported values are `normal`, `debug`, and `off`. |
 | `PUSHOVER_API_TOKEN` | Unless notifications are off | Pushover application API token. |
 | `PUSHOVER_USER_KEY` | Unless notifications are off | Pushover user or group key. |
@@ -58,7 +60,7 @@ Edit `.env` with values for your environment. The sample token is a placeholder.
 | `DATABASE_PATH` | No | SQLite path; defaults to `${DATA_DIR}/koemichi.db`. |
 | `TZ` | No | Time zone used to organize audio files; defaults to `Europe/Berlin`. |
 
-The worker validates its ASR, LLM, and webhook configuration at startup. It also requires both Pushover credentials when notifications are enabled. Set `NOTIFICATION_MODE=off` to disable notifications without those credentials. Configure service URLs so they are reachable from the process or container using them.
+The worker validates its ASR, LLM, and webhook configuration at startup. Configure both dispatch-auth variables or leave both empty. These credentials are passed only to the worker. It also requires both Pushover credentials when notifications are enabled. Set `NOTIFICATION_MODE=off` to disable notifications without those credentials. Configure service URLs so they are reachable from the process or container using them.
 
 ## 🚀 Run with Compose
 
@@ -119,7 +121,7 @@ The service sends this JSON payload to the configured webhook:
 }
 ```
 
-Koemichi sends this payload as an HTTP POST with a JSON body to `DISPATCH_WEBHOOK_URL`. Any 2xx response counts as accepted; the response body is ignored. `note_id` remains stable across retries so the receiver can deduplicate side effects. The receiver can branch on `intent` and is responsible for downstream actions.
+Koemichi sends this payload as an HTTP POST with a JSON body to `DISPATCH_WEBHOOK_URL`. Any 2xx response counts as accepted; the response body is ignored. To authenticate the request, set `DISPATCH_WEBHOOK_AUTH_HEADER` to the header name and `DISPATCH_WEBHOOK_AUTH_VALUE` to its exact value—for example, `Authorization` and `Bearer <token>`, or `X-API-Key` and your API key. `note_id` remains stable across retries so the receiver can deduplicate side effects. The receiver can branch on `intent` and is responsible for downstream actions.
 
 ## 🔔 Notifications and privacy
 

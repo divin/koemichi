@@ -53,6 +53,12 @@ LLM_MODEL_NAME: str | None = os.getenv("LLM_MODEL_NAME")
 # The router POSTs {note_id, transcript, intent} to this configured webhook.
 # Optional in settings; validated when the router worker starts.
 DISPATCH_WEBHOOK_URL: str | None = os.getenv("DISPATCH_WEBHOOK_URL")
+DISPATCH_WEBHOOK_AUTH_HEADER: str | None = (
+    os.getenv("DISPATCH_WEBHOOK_AUTH_HEADER") or None
+)
+DISPATCH_WEBHOOK_AUTH_VALUE: str | None = (
+    os.getenv("DISPATCH_WEBHOOK_AUTH_VALUE") or None
+)
 TIMEZONE: ZoneInfo = ZoneInfo(os.getenv("TZ") or "Europe/Berlin")
 
 PUSHOVER_API_TOKEN: str | None = os.getenv("PUSHOVER_API_TOKEN") or None

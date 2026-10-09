@@ -193,6 +193,23 @@ def test_validate_config_reports_missing_settings(
         router_dispatch.validate_config()
 
 
+def test_validate_config_requires_auth_header_and_value_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(router_dispatch, "LLM_URL", "http://llm.test/v1")
+    monkeypatch.setattr(router_dispatch, "LLM_MODEL_NAME", "test-model")
+    monkeypatch.setattr(
+        router_dispatch, "DISPATCH_WEBHOOK_URL", "http://workflow.test/dispatch"
+    )
+    monkeypatch.setattr(
+        router_dispatch, "DISPATCH_WEBHOOK_AUTH_HEADER", "Authorization"
+    )
+    monkeypatch.setattr(router_dispatch, "DISPATCH_WEBHOOK_AUTH_VALUE", None)
+
+    with pytest.raises(RuntimeError, match="must be set together"):
+        router_dispatch.validate_config()
+
+
 @pytest.mark.asyncio
 async def test_post_to_dispatch_requires_configured_webhook(
     monkeypatch: pytest.MonkeyPatch,
@@ -227,10 +244,13 @@ async def test_post_to_dispatch_posts_seam_payload(
         "DISPATCH_WEBHOOK_URL",
         "http://workflow.test/webhook/dispatch",
     )
+    monkeypatch.setattr(router_dispatch, "DISPATCH_WEBHOOK_AUTH_HEADER", "X-API-Key")
+    monkeypatch.setattr(router_dispatch, "DISPATCH_WEBHOOK_AUTH_VALUE", "test-secret")
 
     await router_dispatch.post_to_dispatch(note_id, "transcript text", Intent.JOURNAL)
 
     assert len(requested) == 1
+    assert requested[0].headers["X-API-Key"] == "test-secret"
     assert json.loads(requested[0].content) == {
         "note_id": str(note_id),
         "transcript": "transcript text",

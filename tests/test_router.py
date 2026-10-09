@@ -62,16 +62,17 @@ def test_keyword_fast_path_returns_none_without_match() -> None:
     assert keyword_intent(None) is None
 
 
-def test_every_intent_except_other_has_keywords() -> None:
+def test_every_intent_has_keywords() -> None:
     for intent in Intent:
-        if intent is not Intent.OTHER:
-            assert INTENT_KEYWORDS[intent], f"Intent {intent} needs keywords"
+        assert INTENT_KEYWORDS[intent], f"Intent {intent} needs keywords"
 
 
-def test_prompt_lists_every_intent() -> None:
+def test_prompt_lists_every_intent_and_uses_memo_as_fallback() -> None:
     prompt = router_prompts.build_system_prompt()
     for intent in Intent:
         assert intent.value in prompt
+    assert "Choose `memo` for a general note" in prompt
+    assert "`other`" not in prompt
 
 
 @pytest.mark.asyncio
@@ -87,7 +88,7 @@ async def test_classify_skips_llm_on_keyword_match(
 
 
 @pytest.mark.asyncio
-async def test_classify_returns_other_for_empty_transcript(
+async def test_classify_returns_memo_for_empty_transcript(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def unexpected_get() -> object:
@@ -95,8 +96,8 @@ async def test_classify_returns_other_for_empty_transcript(
 
     monkeypatch.setattr(router_classify, "_get_classifier", unexpected_get)  # type: ignore[assignment]
 
-    assert await router_classify.classify(None) is Intent.OTHER
-    assert await router_classify.classify("  ") is Intent.OTHER
+    assert await router_classify.classify(None) is Intent.MEMO
+    assert await router_classify.classify("  ") is Intent.MEMO
 
 
 @pytest.mark.asyncio
@@ -141,13 +142,13 @@ async def test_classify_with_details_keeps_llm_confidence(
 
 
 @pytest.mark.asyncio
-async def test_classify_returns_other_when_llm_chooses_other(
+async def test_classify_uses_memo_when_no_specific_intent_fits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    classifier = FakeClassifier(IntentDecision(intent=Intent.OTHER, confidence=0.5))
+    classifier = FakeClassifier(IntentDecision(intent=Intent.MEMO, confidence=0.5))
     monkeypatch.setattr(router_classify, "_get_classifier", lambda: classifier)  # type: ignore[assignment]
 
-    assert await router_classify.classify("the cat is sleeping") is Intent.OTHER
+    assert await router_classify.classify("the cat is sleeping") is Intent.MEMO
 
 
 @pytest.mark.asyncio
@@ -166,6 +167,8 @@ def test_intent_decision_schema_rejects_invalid_values() -> None:
     with pytest.raises(ValueError):
         IntentDecision.model_validate({"intent": "not-an-intent", "confidence": 0.9})
     with pytest.raises(ValueError):
+        IntentDecision.model_validate({"intent": "other", "confidence": 0.5})
+    with pytest.raises(ValueError):
         IntentDecision.model_validate({"intent": "todo", "confidence": 1.5})
 
 
@@ -182,9 +185,11 @@ def test_validate_config_reports_missing_settings(
 ) -> None:
     monkeypatch.setattr(router_dispatch, "LLM_URL", None)
     monkeypatch.setattr(router_dispatch, "LLM_MODEL_NAME", None)
-    monkeypatch.setattr(router_dispatch, "N8N_WEBHOOK_URL", None)
+    monkeypatch.setattr(router_dispatch, "DISPATCH_WEBHOOK_URL", None)
 
-    with pytest.raises(RuntimeError, match="LLM_URL, LLM_MODEL_NAME, N8N_WEBHOOK_URL"):
+    with pytest.raises(
+        RuntimeError, match="LLM_URL, LLM_MODEL_NAME, DISPATCH_WEBHOOK_URL"
+    ):
         router_dispatch.validate_config()
 
 
@@ -192,9 +197,9 @@ def test_validate_config_reports_missing_settings(
 async def test_post_to_dispatch_requires_configured_webhook(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(router_dispatch, "N8N_WEBHOOK_URL", None)
+    monkeypatch.setattr(router_dispatch, "DISPATCH_WEBHOOK_URL", None)
 
-    with pytest.raises(RuntimeError, match="N8N_WEBHOOK_URL is not configured"):
+    with pytest.raises(RuntimeError, match="DISPATCH_WEBHOOK_URL is not configured"):
         await router_dispatch.post_to_dispatch(uuid4(), "text", Intent.MEMO)
 
 
@@ -218,7 +223,9 @@ async def test_post_to_dispatch_posts_seam_payload(
     )
     note_id = uuid4()
     monkeypatch.setattr(
-        router_dispatch, "N8N_WEBHOOK_URL", "http://n8n.test/webhook/dispatch"
+        router_dispatch,
+        "DISPATCH_WEBHOOK_URL",
+        "http://workflow.test/webhook/dispatch",
     )
 
     await router_dispatch.post_to_dispatch(note_id, "transcript text", Intent.JOURNAL)

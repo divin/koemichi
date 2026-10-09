@@ -158,7 +158,7 @@ def dispatched_notification(
     method: str | None,
     confidence: float | None,
 ) -> NotificationDraft:
-    """Build the notification emitted after n8n accepts a dispatch.
+    """Build the notification emitted after the webhook accepts a dispatch.
 
     Parameters
     ----------

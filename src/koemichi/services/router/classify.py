@@ -130,7 +130,7 @@ async def classify_with_details(transcript: str | None) -> ClassificationResult:
     """Classify a transcript and retain the path and available confidence.
 
     The keyword fast path runs first; the LLM is only called when no keyword
-    matches. Empty transcripts classify as ``other`` without a model call.
+    matches. Empty transcripts classify as ``memo`` without a model call.
 
     Parameters
     ----------
@@ -155,8 +155,8 @@ async def classify_with_details(transcript: str | None) -> ClassificationResult:
         return ClassificationResult(fast, ClassificationMethod.KEYWORD, None)
 
     if not text:
-        logger.info("Empty transcript classified as other")
-        return ClassificationResult(Intent.OTHER, ClassificationMethod.EMPTY, None)
+        logger.info("Empty transcript classified as memo")
+        return ClassificationResult(Intent.MEMO, ClassificationMethod.EMPTY, None)
 
     logger.info("No keyword match; calling LLM classifier")
     decision: IntentDecision = (await _get_classifier().run(text)).output

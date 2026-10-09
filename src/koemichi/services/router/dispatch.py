@@ -1,11 +1,11 @@
-"""n8n dispatch client and router configuration validation."""
+"""HTTP webhook dispatch client and router configuration validation."""
 
 import logging
 from uuid import UUID
 
 import httpx
 
-from koemichi.shared.settings import LLM_MODEL_NAME, LLM_URL, N8N_WEBHOOK_URL
+from koemichi.shared.settings import DISPATCH_WEBHOOK_URL, LLM_MODEL_NAME, LLM_URL
 
 from .intents import Intent
 
@@ -20,14 +20,14 @@ def validate_config() -> None:
     Raises
     ------
     RuntimeError
-        If any required LLM or n8n setting is missing.
+        If any required LLM or dispatch webhook setting is missing.
     """
     missing = [
         name
         for name, value in (
             ("LLM_URL", LLM_URL),
             ("LLM_MODEL_NAME", LLM_MODEL_NAME),
-            ("N8N_WEBHOOK_URL", N8N_WEBHOOK_URL),
+            ("DISPATCH_WEBHOOK_URL", DISPATCH_WEBHOOK_URL),
         )
         if not value
     ]
@@ -38,7 +38,7 @@ def validate_config() -> None:
 async def post_to_dispatch(
     note_id: UUID, transcript: str | None, intent: Intent
 ) -> None:
-    """POST the routing seam payload ``{note_id, transcript, intent}`` to n8n.
+    """POST the routing payload ``{note_id, transcript, intent}`` to the configured webhook.
 
     Parameters
     ----------
@@ -55,17 +55,21 @@ async def post_to_dispatch(
     httpx.HTTPError
         If the dispatch request fails.
     RuntimeError
-        If ``N8N_WEBHOOK_URL`` is not configured.
+        If ``DISPATCH_WEBHOOK_URL`` is not configured.
     """
-    if not N8N_WEBHOOK_URL:
-        raise RuntimeError("N8N_WEBHOOK_URL is not configured")
+    if not DISPATCH_WEBHOOK_URL:
+        raise RuntimeError("DISPATCH_WEBHOOK_URL is not configured")
 
     payload = {
         "note_id": str(note_id),
         "transcript": transcript,
         "intent": intent.value,
     }
-    logger.info("Dispatching note %s with intent %s to n8n", note_id, intent.value)
+    logger.info(
+        "Dispatching note %s with intent %s to configured webhook",
+        note_id,
+        intent.value,
+    )
     async with httpx.AsyncClient(timeout=_DISPATCH_TIMEOUT_SECONDS) as client:
-        response = await client.post(N8N_WEBHOOK_URL, json=payload)
+        response = await client.post(DISPATCH_WEBHOOK_URL, json=payload)
     response.raise_for_status()

@@ -6,8 +6,8 @@ Adding a new intent is a two-line change:
 2. add a keyword tuple to ``INTENT_KEYWORDS`` (the keyword fast path).
 
 The classification prompt in ``prompts.py`` is generated from the enum, so the
-LLM fallback learns about the new intent automatically. The n8n dispatch
-workflow then needs a matching branch (that lives outside this codebase).
+LLM fallback learns about the new intent automatically. The configured webhook
+receiver can branch on the intent (that integration lives outside this codebase).
 """
 
 import re
@@ -15,7 +15,7 @@ from enum import StrEnum
 
 
 class Intent(StrEnum):
-    """Intent labels emitted by the classifier and consumed by n8n.
+    """Intent labels emitted by the classifier and included in webhook payloads.
 
     Attributes
     ----------
@@ -24,22 +24,19 @@ class Intent(StrEnum):
     TODO : str
         Actionable task or reminder.
     MEMO : str
-        General note without a more specific category.
+        General note or fallback when no more specific category fits.
     RESEARCH : str
         Request for research and a summary.
-    OTHER : str
-        Content that does not fit the other categories.
     """
 
     JOURNAL = "journal"
     TODO = "todo"
     MEMO = "memo"
     RESEARCH = "research"
-    OTHER = "other"
 
 
-# Lowercase triggers matched against the start of a transcript. ``other``
-# deliberately has no keywords: it is the fallback intent.
+# Lowercase triggers matched against the start of a transcript. General notes
+# without a specific keyword fall through to the LLM, where ``memo`` is the default.
 INTENT_KEYWORDS: dict[Intent, tuple[str, ...]] = {
     Intent.JOURNAL: ("journal", "diary", "tagebuch"),
     Intent.TODO: ("todo", "to-do", "task", "aufgabe"),

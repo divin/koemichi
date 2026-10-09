@@ -12,7 +12,7 @@ Examples:
 - "I have a doctor's appointment tomorrow" -> todo
 - "The bakery on the corner now sells sourdough" -> memo
 - "Research how fast sea levels are rising" -> research
-- "I'm feeling tired after the long drive" -> other
+- "I'm feeling tired after the long drive" -> memo
 """
 
 
@@ -30,7 +30,7 @@ def build_system_prompt() -> str:
         f"following intents: {intents}.\n"
         "The transcript is raw speech-to-text output, so punctuation and casing "
         "may be missing; ignore filler words such as 'uh', 'um'.\n"
-        "Choose `other` when the note clearly does not fit any specific intent.\n"
+        "Choose `memo` for a general note or whenever no more specific intent fits.\n"
         "Return only the classification JSON; the intent field must be one of "
         "the intents listed above.\n" + _EXAMPLES
     )

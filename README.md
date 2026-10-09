@@ -1,10 +1,10 @@
-# Koemichi
+# Koemichi 🎙️
 
-Koemichi is a voice-note processing service for a single user and a single host. It accepts authenticated audio uploads, stores recordings and processing state, transcribes and classifies notes, sends results to a configured webhook, and reports lifecycle events through Pushover.
+**A private voice-note pipeline for one user on one host.** Upload a recording and Koemichi stores it, transcribes and classifies it, sends the result to your chosen webhook, and reports progress through Pushover.
 
 The name is a Japanese-inspired play on *koe* (声, “voice”) and *michi* (道, “path” or “road”): a voice route for routing my commands.
 
-## Architecture and scope
+## 🧭 How it works
 
 ```text
 Audio client
@@ -16,23 +16,23 @@ FastAPI ingest ──► audio files + note state in SQLite
                     single SQLite worker
                     ├── transcription ──► configured ASR service
                     ├── classification ──► keyword match, then LLM fallback
-                    ├── dispatch ────────► configured webhook (for example, n8n)
+                    ├── dispatch ────────► configured HTTP POST webhook
                     └── notifications ──► Pushover outbox
 ```
 
-The API and worker are separate processes built from the same image and share a persistent data directory. SQLite stores note state and supports the worker's polling and retry loop. Pushover notifications use a separate outbox so delivery failures do not block note processing. Redis and a general-purpose task broker are not used.
+The API and worker are separate processes built from the same image and share persistent storage. A single SQLite worker handles note processing and retries; a separate outbox keeps notification delivery failures from blocking notes. There is no Redis or general-purpose task broker.
 
-This design is intended for one host and one worker. Do not run multiple worker replicas or put the SQLite database on a network filesystem.
+**Designed for one host and one worker.** Do not run multiple worker replicas or put the SQLite database on a network filesystem.
 
-This repository contains the Python services and deployment files. Webhook workflows (including n8n workflow definitions) are external dependencies and are not included here. The configured webhook must accept the dispatch payload described below.
+The speech-to-text service, optional LLM, and webhook receiver are external integrations. The webhook must accept the HTTP POST payload described below.
 
-### Example self-hosted AI services
+### 🤖 Example self-hosted AI services
 
 For my setup, speech recognition is provided by the CPU Docker container from [`audio.cpp`](https://github.com/0xShug0/audio.cpp), using the [Qwen3-ASR-1.7B GGUF model](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/main/Qwen3-ASR-1.7B-GGUF). I use a separate Docker container running [`llama.cpp`](https://github.com/ggml-org/llama.cpp) as the OpenAI-compatible LLM endpoint for intent-classification fallback. Configure `STT_URL` and `STT_MODEL_NAME` for the ASR container, and `LLM_URL` and `LLM_MODEL_NAME` for the llama.cpp server.
 
 These are my deployment choices, not bundled Koemichi dependencies; other compatible ASR and LLM services can be used instead.
 
-## Requirements and configuration
+## ⚙️ Requirements and configuration
 
 For Compose, create a local environment file from the sample:
 
@@ -49,7 +49,7 @@ Edit `.env` with values for your environment. The sample token is a placeholder.
 | `STT_MODEL_NAME` | Yes | ASR provider/model label used by the transcription client and notices. |
 | `LLM_URL` | Worker | OpenAI-compatible API base URL used for intent fallback. |
 | `LLM_MODEL_NAME` | Worker | Model used for intent fallback. |
-| `N8N_WEBHOOK_URL` | Worker | Dispatch webhook URL. |
+| `DISPATCH_WEBHOOK_URL` | Worker | HTTP endpoint to receive classified-note POST requests. |
 | `NOTIFICATION_MODE` | No | `normal` by default; supported values are `normal`, `debug`, and `off`. |
 | `PUSHOVER_API_TOKEN` | Unless notifications are off | Pushover application API token. |
 | `PUSHOVER_USER_KEY` | Unless notifications are off | Pushover user or group key. |
@@ -60,7 +60,7 @@ Edit `.env` with values for your environment. The sample token is a placeholder.
 
 The worker validates its ASR, LLM, and webhook configuration at startup. It also requires both Pushover credentials when notifications are enabled. Set `NOTIFICATION_MODE=off` to disable notifications without those credentials. Configure service URLs so they are reachable from the process or container using them.
 
-## Run with Compose
+## 🚀 Run with Compose
 
 The Compose file uses the image `ghcr.io/divin/koemichi:latest`. With a published image and a configured `.env` file:
 
@@ -72,16 +72,15 @@ docker compose logs -f ingest worker
 
 The API is bound to `127.0.0.1:8000`; the worker has no published port. Both containers share `${HOST_DATA_DIR:-./data}` mounted at `/data`. The worker is configured as a single instance.
 
-## Webhook API
+## 📥 Webhook API
 
-`GET /` is an unauthenticated connectivity check and returns `200` with `{"status":"ok"}`. It can be used for webhook URL test/ping requests; it does not create or process a note.
+| Method and path | Authentication | Purpose |
+|---|---|---|
+| `GET /` | None | Connectivity ping; returns `200 {"status":"ok"}`. Does not create or process a note. |
+| `POST /memo` | Bearer token | Accepts an audio recording; acknowledges audio-less test events without processing. |
+| `POST /action` | Bearer token | Deprecated; returns `410 Gone` without processing the upload. |
 
-Both webhook endpoints require `Authorization: Bearer <WEBHOOK_TOKEN>`. `/memo` accepts multipart form data:
-
-- `POST /memo` stores audio under `memos/`.
-- `POST /action` is marked deprecated and returns HTTP `410 Gone` until I find a use case for an additional endpoint; uploaded data is not processed.
-
-For `/memo`, required form fields are `audio` (recording file), `recordedAt` (Unix timestamp in milliseconds), and `client` (client identifier). `transcription` is optional. The optional `X-Audio-Size` header checks that the stored file matches the client-reported byte count; it is not the upload-size security limit.
+For `POST /memo`, send multipart form data with `recordedAt` (Unix timestamp in milliseconds) and `client` (client identifier); real memo uploads must also include `audio` (the recording file). `transcription` is optional. The optional `X-Audio-Size` header checks that the stored file matches the client-reported byte count; it is not the upload-size security limit. An authenticated request with the required form fields but no audio is acknowledged with `200 {"status":"test_event"}` and does not create a note. This supports senders that issue audio-less test events, but it only checks webhook reachability—not transcription or downstream dispatch.
 
 Example upload:
 
@@ -93,13 +92,20 @@ curl -X POST http://127.0.0.1:8000/memo \
   -F 'audio=@voice-note.m4a;type=audio/mp4'
 ```
 
-An accepted upload returns HTTP `202` with `{"status":"accepted"}`. The service rejects missing audio, invalid credentials, audio-size mismatches, and audio larger than **25 MiB** (HTTP `413`). An authenticated oversized upload also queues a rate-limited Pushover alert; it does not create a note.
+An accepted upload returns HTTP `202` with `{"status":"accepted"}`. The service rejects invalid credentials, audio-size mismatches, and audio larger than **25 MiB** (HTTP `413`). An authenticated oversized upload also queues a rate-limited Pushover alert; it does not create a note.
 
-Notes move through `received → transcribing → transcribed → routing → routed → dispatched`, or reach terminal `error` after exhausted retries. `dispatched` means the webhook accepted the request; it does not indicate whether downstream workflow actions completed successfully.
+Notes move through `received → transcribing → transcribed → routing → routed → dispatched`, or reach terminal `error` after retries are exhausted. `dispatched` means the webhook accepted the request; it does not indicate whether downstream actions completed successfully.
 
-## Classification and dispatch contract
+## 🧠 Classification and dispatch
 
-The classifier first checks the beginning of a transcript for configured intent phrases. If none match, it calls the configured LLM and validates the result against these intents: `journal`, `todo`, `memo`, `research`, and `other`.
+The classifier first checks the beginning of the transcript for a configured keyword phrase. If none matches, it asks the configured LLM to choose an intent. Every note is assigned one of these intent values:
+
+| Intent | Meaning | Keyword fast path (transcript starts with) |
+|---|---|---|
+| `journal` | Personal reflection or diary entry. | `journal`, `diary`, `tagebuch` |
+| `todo` | An actionable task or reminder. | `todo`, `to-do`, `task`, `aufgabe` |
+| `memo` | General-note category and fallback when no more specific intent fits. | `memo`, `note`, `notiz`, `remember` |
+| `research` | A request to look something up or research a topic. | `research`, `recherche`, `look up`, `lookup`, `search` |
 
 The service sends this JSON payload to the configured webhook:
 
@@ -111,9 +117,9 @@ The service sends this JSON payload to the configured webhook:
 }
 ```
 
-`note_id` remains stable across dispatch retries so the receiver can deduplicate side effects. The receiving workflow is responsible for handling this contract and its downstream actions. Since the selected intent is included in every dispatch, an external workflow (for example, n8n) can branch into different behavior for journal, todo, memo, research, or other notes. This lets me adjust how voice notes are handled mostly by changing workflow configuration, without much change to Koemichi's code.
+Koemichi sends this payload as an HTTP POST with a JSON body to `DISPATCH_WEBHOOK_URL`. Any 2xx response counts as accepted; the response body is ignored. `note_id` remains stable across retries so the receiver can deduplicate side effects. The receiver can branch on `intent` and is responsible for downstream actions.
 
-## Notifications and privacy
+## 🔔 Notifications and privacy
 
 Create a Pushover application to obtain an application API token, and configure it with your Pushover user or group key. Keep both credentials in `.env` or a deployment secret manager. Only the worker receives the Pushover credentials. Notification events are stored in SQLite and delivered asynchronously.
 
@@ -127,7 +133,7 @@ Routine Pushover messages do not include the full transcript. Debug messages con
 
 Pushover priority `2` (emergency/repeating) is not used for routine updates. Delivery failures are retried with bounded backoff and recorded in the outbox.
 
-## Storage and backups
+## 💾 Storage and backups
 
 By default, Compose stores the SQLite database at `/data/koemichi.db` and audio below `/data/memos/` and `/data/actions/`. On the host, these files live in `${HOST_DATA_DIR:-./data}`. A direct local run defaults to `./data` and derives the database path as `./data/koemichi.db`. Keep the selected directory on persistent storage and back up the whole directory so the database and referenced recordings stay together. Use a local filesystem for SQLite rather than NFS/SMB.
 
@@ -141,7 +147,7 @@ docker compose start ingest worker
 
 Do not copy only `koemichi.db` while services are running; committed data may still be in the WAL file. Use SQLite's online backup mechanism for live backups.
 
-## Internet-facing deployments
+## 🔒 Internet-facing deployments
 
 Compose binds the API to loopback. If exposing it through a reverse proxy:
 
@@ -152,7 +158,7 @@ Compose binds the API to loopback. If exposing it through a reverse proxy:
 
 The proxy is not bundled or configured here. Do not publish SQLite, ASR, LLM, or webhook administration interfaces publicly.
 
-## Development checks
+## 🧪 Development checks
 
 With Python 3.12 and `uv` installed:
 

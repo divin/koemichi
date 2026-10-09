@@ -245,7 +245,7 @@ async def test_dispatch_retry_reuses_note_id_without_reclassifying(
     ) -> None:
         dispatch_attempts.append((dispatch_note_id, transcript, intent))
         if len(dispatch_attempts) == 1:
-            raise RuntimeError("n8n unavailable")
+            raise RuntimeError("dispatch webhook unavailable")
 
     monkeypatch.setattr(worker_runner, "classify_with_details", unexpected_classify)
     monkeypatch.setattr(worker_runner, "post_to_dispatch", fail_once_then_succeed)

@@ -37,9 +37,9 @@ class NoteStatus(StrEnum):
     ROUTING : str
         A worker currently holds a classification lease.
     ROUTED : str
-        Classification completed; dispatch to n8n is pending.
+        Classification completed; webhook dispatch is pending.
     DISPATCHED : str
-        n8n accepted the dispatch request.
+        The configured webhook accepted the dispatch request.
     ERROR : str
         Processing stopped after exhausting retries.
     """

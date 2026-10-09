@@ -50,9 +50,9 @@ STT_MODEL_NAME: str = _required_env("STT_MODEL_NAME")
 LLM_URL: str | None = os.getenv("LLM_URL")
 LLM_MODEL_NAME: str | None = os.getenv("LLM_MODEL_NAME")
 
-# n8n dispatch webhook (the seam): the router POSTs {note_id, transcript,
-# intent} here. Optional in settings; validated when the router worker starts.
-N8N_WEBHOOK_URL: str | None = os.getenv("N8N_WEBHOOK_URL")
+# The router POSTs {note_id, transcript, intent} to this configured webhook.
+# Optional in settings; validated when the router worker starts.
+DISPATCH_WEBHOOK_URL: str | None = os.getenv("DISPATCH_WEBHOOK_URL")
 TIMEZONE: ZoneInfo = ZoneInfo(os.getenv("TZ") or "Europe/Berlin")
 
 PUSHOVER_API_TOKEN: str | None = os.getenv("PUSHOVER_API_TOKEN") or None

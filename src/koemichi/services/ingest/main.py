@@ -176,7 +176,7 @@ def receive_memo(
     Parameters
     ----------
     audio : UploadFile or None
-        Uploaded memo audio; required for a successful request.
+        Uploaded memo audio; omitted for a no-op connectivity test event.
     transcription : str or None
         Optional transcript supplied by the client.
     recordedAt : int
@@ -193,8 +193,8 @@ def receive_memo(
     Returns
     -------
     JSONResponse
-        202 when accepted, 400 when the audio size mismatches, or 422 when
-        audio is missing.
+        202 when an upload is accepted, 200 for a no-op test event, 400 when
+        the audio size mismatches, or 413 when the audio is oversized.
 
     Raises
     ------
@@ -226,11 +226,8 @@ def receive_memo(
                 content={"status": "error", "detail": "Audio size mismatch"},
             )
     else:
-        logger.warning("Rejecting /memo without audio")
-        return JSONResponse(
-            status_code=422,
-            content={"status": "error", "detail": "Audio is required"},
-        )
+        logger.info("Acknowledging /memo test event without audio")
+        return JSONResponse(status_code=200, content={"status": "test_event"})
 
     _persist_note(
         session,

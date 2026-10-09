@@ -49,7 +49,7 @@ def _migrate_schema() -> None:
                     )
 
             # Earlier versions stored enum member names and used ROUTED to mean
-            # n8n had accepted the note.
+            # the webhook had accepted the note.
             connection.execute(
                 text("UPDATE note SET status = 'DISPATCHED' WHERE status = 'ROUTED'")
             )
@@ -111,6 +111,12 @@ def _migrate_schema() -> None:
                     )
                     connection.exec_driver_sql(f"DROP TABLE {legacy_table}")
             connection.exec_driver_sql("UPDATE koemichi_schema_version SET version = 3")
+
+        if version < 4:
+            connection.execute(
+                text("UPDATE note SET intent = 'memo' WHERE intent = 'other'")
+            )
+            connection.exec_driver_sql("UPDATE koemichi_schema_version SET version = 4")
 
 
 def create_db_and_tables() -> None:

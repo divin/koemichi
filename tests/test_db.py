@@ -93,6 +93,45 @@ def test_processing_migration_adds_fields_and_preserves_legacy_delivery_state(
         engine.dispose()
 
 
+def test_removed_other_intent_is_migrated_to_memo(tmp_path: Path, monkeypatch) -> None:
+    database_path = tmp_path / "intent-migration.db"
+    engine = create_engine(f"sqlite:///{database_path}")
+    SQLModel.metadata.create_all(engine)
+    note = Note(
+        id=uuid4(),
+        source=NoteSource.MEMO,
+        status=NoteStatus.ROUTED,
+        recorded_at_ms=1_700_000_000_000,
+        audio_key="memos/queued.m4a",
+        intent="other",
+    )
+    with Session(engine) as session:
+        session.add(note)
+        session.commit()
+        note_id = note.id
+
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "CREATE TABLE koemichi_schema_version (version INTEGER NOT NULL)"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO koemichi_schema_version (version) VALUES (3)"
+        )
+
+    monkeypatch.setattr(db, "engine", engine)
+    monkeypatch.setattr(db, "DATABASE_PATH", database_path)
+    try:
+        db.create_db_and_tables()
+
+        with Session(engine) as session:
+            migrated = session.get(Note, note_id)
+        assert migrated is not None
+        assert migrated.intent == "memo"
+        assert migrated.status == NoteStatus.ROUTED
+    finally:
+        engine.dispose()
+
+
 def test_outbox_migration_allows_events_without_a_note(
     tmp_path: Path, monkeypatch
 ) -> None:

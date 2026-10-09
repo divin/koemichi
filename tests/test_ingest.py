@@ -161,7 +161,7 @@ def test_action_endpoint_is_deprecated_without_processing_upload(
     assert list(storage_root.rglob("*.m4a")) == []
 
 
-def test_missing_audio_is_rejected_without_persisting_a_note(
+def test_missing_audio_is_acknowledged_as_test_event_without_persisting_a_note(
     client: TestClient,
     database_engine: Engine,
 ) -> None:
@@ -171,9 +171,11 @@ def test_missing_audio_is_rejected_without_persisting_a_note(
         data={"recordedAt": "1700000000000", "client": "unit-test-client"},
     )
 
-    assert response.status_code == 422, response.text
-    assert response.json()["detail"] == "Audio is required"
+    assert response.status_code == 200, response.text
+    assert response.json() == {"status": "test_event"}
     assert _notes(database_engine) == []
+    with Session(database_engine) as session:
+        assert session.exec(select(NotificationOutbox)).all() == []
 
 
 def test_oversized_audio_returns_413_and_queues_notification(

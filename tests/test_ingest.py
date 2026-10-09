@@ -73,6 +73,13 @@ def _notes(engine: Engine) -> list[Note]:
         return list(session.exec(select(Note)).all())
 
 
+def test_root_returns_ok_for_connectivity_checks(client: TestClient) -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def test_audio_is_saved_and_note_is_persisted(
     client: TestClient,
     database_engine: Engine,

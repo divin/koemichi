@@ -2,6 +2,8 @@
 
 Koemichi is a voice-note processing service for a single user and a single host. It accepts authenticated audio uploads, stores recordings and processing state, transcribes and classifies notes, sends results to a configured webhook, and reports lifecycle events through Pushover.
 
+The name is a Japanese-inspired play on *koe* (声, “voice”) and *michi* (道, “path” or “road”): a voice route for routing my commands.
+
 ## Architecture and scope
 
 ```text
@@ -72,7 +74,9 @@ The API is bound to `127.0.0.1:8000`; the worker has no published port. Both con
 
 ## Webhook API
 
-Both endpoints require `Authorization: Bearer <WEBHOOK_TOKEN>`. `/memo` accepts multipart form data:
+`GET /` is an unauthenticated connectivity check and returns `200` with `{"status":"ok"}`. It can be used for webhook URL test/ping requests; it does not create or process a note.
+
+Both webhook endpoints require `Authorization: Bearer <WEBHOOK_TOKEN>`. `/memo` accepts multipart form data:
 
 - `POST /memo` stores audio under `memos/`.
 - `POST /action` is marked deprecated and returns HTTP `410 Gone` until I find a use case for an additional endpoint; uploaded data is not processed.

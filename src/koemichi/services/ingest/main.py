@@ -55,6 +55,12 @@ app = FastAPI(
 )
 
 
+@app.get("/", include_in_schema=False)
+def health_check() -> dict[str, str]:
+    """Respond to basic service and webhook connectivity checks."""
+    return {"status": "ok"}
+
+
 def _persist_note(
     session: Session,
     *,

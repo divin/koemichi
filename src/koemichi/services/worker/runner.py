@@ -2,15 +2,21 @@
 
 import asyncio
 import logging
-import time
 from datetime import UTC, datetime
 
 from koemichi.integrations.pushover import PushoverError, send_message
-from koemichi.services.router.classify import classify_with_details
-from koemichi.services.router.dispatch import post_to_dispatch, validate_config
+from koemichi.services.router.classify import (
+    classify_with_details,
+    validate_classifier_config,
+)
+from koemichi.services.router.execution import (
+    UnimplementedIntentError,
+    execute_intent,
+    register_intent_handler,
+)
 from koemichi.services.router.intents import Intent
-from koemichi.services.transcriber.client import check_stt_health
-from koemichi.services.transcriber.processor import transcribe_note
+from koemichi.services.workflows.journal import handle_journal, validate_journal_config
+from koemichi.services.workflows.memo import handle_memo, validate_memo_config
 from koemichi.shared.db import close_db, create_db_and_tables
 from koemichi.shared.models.note import NoteStatus
 from koemichi.shared.models.notification import NotificationMode
@@ -20,10 +26,9 @@ from koemichi.shared.notifications import (
     dispatched_notification,
     fail_notification,
     recover_expired_notifications,
-    transcribed_notification,
     validate_notification_config,
 )
-from koemichi.shared.settings import NOTIFICATION_MODE, STT_MODEL_NAME
+from koemichi.shared.settings import NOTIFICATION_MODE
 
 from .queue import (
     Stage,
@@ -36,6 +41,9 @@ from .queue import (
 
 logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = 1
+
+register_intent_handler(Intent.MEMO, handle_memo)
+register_intent_handler(Intent.JOURNAL, handle_journal)
 
 
 def _utc_now() -> datetime:
@@ -65,19 +73,7 @@ async def process_next_note(now: datetime | None = None) -> bool:
 
     note = claim.note
     try:
-        if claim.stage == Stage.TRANSCRIBE:
-            started_at = time.perf_counter()
-            transcript = await transcribe_note(note)
-            duration = time.perf_counter() - started_at
-            complete_stage(
-                claim,
-                notification=transcribed_notification(
-                    note.id, duration, STT_MODEL_NAME
-                ),
-                status=NoteStatus.TRANSCRIBED,
-                transcript=transcript,
-            )
-        elif claim.stage == Stage.CLASSIFY:
+        if claim.stage == Stage.CLASSIFY:
             result = await classify_with_details(note.transcript)
             complete_stage(
                 claim,
@@ -89,7 +85,7 @@ async def process_next_note(now: datetime | None = None) -> bool:
         else:
             if note.intent is None:
                 raise ValueError("Routed note has no intent")
-            await post_to_dispatch(note.id, note.transcript, Intent(note.intent))
+            await execute_intent(note)
             complete_stage(
                 claim,
                 notification=dispatched_notification(
@@ -102,7 +98,12 @@ async def process_next_note(now: datetime | None = None) -> bool:
             )
     except Exception as exc:  # noqa: BLE001 - persist stage failures for retries
         failure_time = current_time if now is not None else _utc_now()
-        record_failure(claim, failure_time, exc)
+        record_failure(
+            claim,
+            failure_time,
+            exc,
+            retryable=not isinstance(exc, UnimplementedIntentError),
+        )
         logger.error(
             "%s failed for note %s (%s)",
             claim.stage.value,
@@ -175,14 +176,16 @@ async def run_worker() -> None:
     Raises
     ------
     RuntimeError
-        If the STT service is unreachable, router settings are missing, or
-        notifications are enabled without both Pushover credentials.
+        If router settings are missing or notifications are enabled without both
+        Pushover credentials.
     """
     create_db_and_tables()
-    await check_stt_health()
-    validate_config()
+
+    validate_classifier_config()
+    validate_memo_config()
+    validate_journal_config()
     validate_notification_config()
-    logger.info("SQLite note worker started (notifications=%s)", NOTIFICATION_MODE)
+    logger.info("Koemichi routing worker started (notifications=%s)", NOTIFICATION_MODE)
     try:
         async with asyncio.TaskGroup() as tasks:
             tasks.create_task(_run_pipeline())

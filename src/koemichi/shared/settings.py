@@ -11,55 +11,16 @@ from koemichi.shared.models.notification import NotificationMode
 load_dotenv()
 
 
-def _required_env(name: str) -> str:
-    """Read a required, non-empty environment variable.
-
-    Parameters
-    ----------
-    name : str
-        Name of the environment variable to read.
-
-    Returns
-    -------
-    str
-        Configured value.
-
-    Raises
-    ------
-    RuntimeError
-        If the variable is unset or empty.
-    """
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"{name} must be set and non-empty")
-    return value
-
-
 DATA_DIR: Path = Path(os.getenv("DATA_DIR") or "data")
-AUDIO_STORAGE_ROOT: Path = DATA_DIR
-MEMO_SAVE_DIR: Path = DATA_DIR / "memos"
-ACTION_SAVE_DIR: Path = DATA_DIR / "actions"
 DATABASE_PATH: Path = Path(os.getenv("DATABASE_PATH") or DATA_DIR / "koemichi.db")
 
-WEBHOOK_TOKEN: str = _required_env("WEBHOOK_TOKEN")
-STT_URL: str = _required_env("STT_URL")
-STT_MODEL_NAME: str = _required_env("STT_MODEL_NAME")
+TRANSCRIPT_INGEST_TOKEN: str | None = os.getenv("TRANSCRIPT_INGEST_TOKEN") or None
+NOTEDISCOVERY_API_URL: str | None = os.getenv("NOTEDISCOVERY_API_URL") or None
+TIMEZONE = ZoneInfo(os.getenv("TZ") or "Europe/Berlin")
 
-# Local LLM endpoint for intent classification. LLM_URL must be the
-# OpenAI-compatible API base of the local llama.cpp server, e.g. http://llm:8080/v1.
+# Local LLM endpoint for intent classification, if keyword matching does not apply.
 LLM_URL: str | None = os.getenv("LLM_URL")
 LLM_MODEL_NAME: str | None = os.getenv("LLM_MODEL_NAME")
-
-# The router POSTs {note_id, transcript, intent} to this configured webhook.
-# Optional in settings; validated when the router worker starts.
-DISPATCH_WEBHOOK_URL: str | None = os.getenv("DISPATCH_WEBHOOK_URL")
-DISPATCH_WEBHOOK_AUTH_HEADER: str | None = (
-    os.getenv("DISPATCH_WEBHOOK_AUTH_HEADER") or None
-)
-DISPATCH_WEBHOOK_AUTH_VALUE: str | None = (
-    os.getenv("DISPATCH_WEBHOOK_AUTH_VALUE") or None
-)
-TIMEZONE: ZoneInfo = ZoneInfo(os.getenv("TZ") or "Europe/Berlin")
 
 PUSHOVER_API_TOKEN: str | None = os.getenv("PUSHOVER_API_TOKEN") or None
 PUSHOVER_USER_KEY: str | None = os.getenv("PUSHOVER_USER_KEY") or None

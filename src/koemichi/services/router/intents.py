@@ -6,8 +6,8 @@ Adding a new intent is a two-line change:
 2. add a keyword tuple to ``INTENT_KEYWORDS`` (the keyword fast path).
 
 The classification prompt in ``prompts.py`` is generated from the enum, so the
-LLM fallback learns about the new intent automatically. The configured webhook
-receiver can branch on the intent (that integration lives outside this codebase).
+LLM fallback learns about the new intent automatically. Each intent's Python
+workflow is registered with the execution router.
 """
 
 import re
@@ -15,7 +15,7 @@ from enum import StrEnum
 
 
 class Intent(StrEnum):
-    """Intent labels emitted by the classifier and included in webhook payloads.
+    """Intent labels emitted by the classifier and used by Python workflows.
 
     Attributes
     ----------

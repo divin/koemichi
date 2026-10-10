@@ -7,9 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-os.environ.setdefault("WEBHOOK_TOKEN", "unit-test-token")
-os.environ.setdefault("STT_URL", "http://localhost:8080/v1/audio/transcriptions")
-os.environ.setdefault("STT_MODEL_NAME", "test-model")
+os.environ.setdefault("TRANSCRIPT_INGEST_TOKEN", "unit-test-ingest-token")
 os.environ.setdefault("NOTIFICATION_MODE", "normal")
 
 import httpx
@@ -18,10 +16,15 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from koemichi.integrations import pushover
+from koemichi.services.router.classify import (
+    ClassificationMethod,
+    ClassificationResult,
+)
+from koemichi.services.router.intents import Intent
 from koemichi.services.worker import queue as worker_queue
 from koemichi.services.worker import runner as worker_runner
 from koemichi.shared import notifications
-from koemichi.shared.models.note import Note, NoteSource
+from koemichi.shared.models.note import Note, NoteSource, NoteStatus
 from koemichi.shared.models.notification import (
     NotificationMode,
     NotificationOutbox,
@@ -51,8 +54,9 @@ def _create_note(engine: Engine) -> Note:
     note = Note(
         id=uuid4(),
         source=NoteSource.MEMO,
+        status=NoteStatus.TRANSCRIBED,
         recorded_at_ms=1_700_000_000_000,
-        audio_key="memos/notification-test.m4a",
+        transcript="memo for tests",
     )
     with Session(engine) as session:
         session.add(note)
@@ -74,6 +78,7 @@ def _outbox_events(engine: Engine, note_id: object) -> list[NotificationOutbox]:
 def test_notification_policy_filters_debug_events(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify normal mode suppresses debug-only notification records."""
     note = _create_note(database_engine)
     received = notifications.received_notification(note.id, note.source)
     claim = notifications.stage_claim_notification(note.id, "transcription", 1)
@@ -102,6 +107,7 @@ def test_notification_policy_filters_debug_events(
 def test_debug_detail_messages_use_low_priority_and_errors_stay_urgent(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify debug messages are quiet while terminal errors stay urgent."""
     normal_note = _create_note(database_engine)
     debug_note = _create_note(database_engine)
     failed_note = _create_note(database_engine)
@@ -147,6 +153,7 @@ def test_debug_detail_messages_use_low_priority_and_errors_stay_urgent(
 def test_off_mode_does_not_enqueue_notifications(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify disabled notification mode does not enqueue messages."""
     note = _create_note(database_engine)
     monkeypatch.setattr(notifications, "NOTIFICATION_MODE", NotificationMode.OFF)
 
@@ -162,6 +169,7 @@ def test_off_mode_does_not_enqueue_notifications(
 def test_transient_delivery_failure_retries_and_permanent_failure_stops(
     database_engine: Engine,
 ) -> None:
+    """Verify transient notification errors retry and permanent errors stop."""
     note = _create_note(database_engine)
     start = datetime(2025, 1, 1, tzinfo=UTC)
     with Session(database_engine) as session:
@@ -205,6 +213,7 @@ def test_transient_delivery_failure_retries_and_permanent_failure_stops(
 def test_expired_notification_claim_is_recovered(
     database_engine: Engine,
 ) -> None:
+    """Verify an expired notification lease returns to the pending queue."""
     note = _create_note(database_engine)
     start = datetime(2025, 1, 1, tzinfo=UTC)
     with Session(database_engine) as session:
@@ -233,6 +242,7 @@ def test_expired_notification_claim_is_recovered(
 async def test_delivery_failure_does_not_block_note_processing(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Verify Pushover delivery errors do not prevent note processing."""
     note = _create_note(database_engine)
     start = datetime(2025, 1, 1, tzinfo=UTC)
     with Session(database_engine) as session:
@@ -243,6 +253,7 @@ async def test_delivery_failure_does_not_block_note_processing(
     monkeypatch.setattr(worker_queue, "engine", database_engine)
 
     async def fail_send(_: str, __: str, ___: int) -> None:
+        """Raise a retryable error to exercise notification retry handling."""
         raise pushover.PushoverError("Pushover server error (HTTP 503)", retryable=True)
 
     monkeypatch.setattr(worker_runner, "send_message", fail_send)
@@ -253,18 +264,20 @@ async def test_delivery_failure_does_not_block_note_processing(
         seconds=notifications.OUTBOX_BASE_RETRY_SECONDS
     )
 
-    async def fake_transcribe(_: Note) -> str:
-        return "transcript"
+    async def fake_classify(_: str | None) -> ClassificationResult:
+        """Return a deterministic memo classification for the worker."""
+        return ClassificationResult(Intent.MEMO, ClassificationMethod.KEYWORD, None)
 
-    monkeypatch.setattr(worker_runner, "transcribe_note", fake_transcribe)
+    monkeypatch.setattr(worker_runner, "classify_with_details", fake_classify)
     assert await worker_runner.process_next_note(start) is True
     with Session(database_engine) as session:
         persisted_note = session.get(Note, note.id)
     assert persisted_note is not None
-    assert persisted_note.transcript == "transcript"
+    assert persisted_note.transcript == "memo for tests"
+    assert persisted_note.status == NoteStatus.ROUTED
 
     async def succeed_send(_: str, __: str, ___: int) -> None:
-        return None
+        """Accept the retried notification without contacting Pushover."""
 
     monkeypatch.setattr(worker_runner, "send_message", succeed_send)
     assert (
@@ -284,6 +297,7 @@ async def test_delivery_failure_does_not_block_note_processing(
 def test_validate_notification_config_requires_both_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify notification delivery requires credentials unless disabled."""
     monkeypatch.setattr(notifications, "NOTIFICATION_MODE", NotificationMode.NORMAL)
     monkeypatch.setattr(notifications, "PUSHOVER_API_TOKEN", "app-token")
     monkeypatch.setattr(notifications, "PUSHOVER_USER_KEY", None)
@@ -299,9 +313,11 @@ def test_validate_notification_config_requires_both_secrets(
 async def test_pushover_sends_form_data_and_checks_success_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify Pushover receives form data and a valid response is accepted."""
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
+        """Capture the Pushover request and return a successful response."""
         requests.append(request)
         return httpx.Response(200, json={"status": 1, "request": "request-id"})
 
@@ -347,6 +363,7 @@ async def test_pushover_classifies_api_failures(
     body: dict[str, object],
     retryable: bool,
 ) -> None:
+    """Verify Pushover API failures receive the expected retry policy."""
     client_type = httpx.AsyncClient
     monkeypatch.setattr(pushover, "PUSHOVER_API_TOKEN", "application-token")
     monkeypatch.setattr(pushover, "PUSHOVER_USER_KEY", "user-key")

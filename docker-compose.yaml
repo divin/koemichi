@@ -1,14 +1,10 @@
-name: koemichi
-
 services:
-  ingest:
+  receiver:
     image: ghcr.io/divin/koemichi:latest
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${KOEMICHI_PORT:-8001}:8000"
     environment:
-      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?Set WEBHOOK_TOKEN in .env}
-      STT_URL: ${STT_URL:?Set STT_URL in .env}
-      STT_MODEL_NAME: ${STT_MODEL_NAME:?Set STT_MODEL_NAME in .env}
+      TRANSCRIPT_INGEST_TOKEN: ${TRANSCRIPT_INGEST_TOKEN:?Set TRANSCRIPT_INGEST_TOKEN in .env}
       DATA_DIR: /data
       NOTIFICATION_MODE: ${NOTIFICATION_MODE:-normal}
       TZ: ${TZ:-Europe/Berlin}
@@ -20,14 +16,9 @@ services:
     image: ghcr.io/divin/koemichi:latest
     command: ["python", "-m", "koemichi.services.worker"]
     environment:
-      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?Set WEBHOOK_TOKEN in .env}
-      STT_URL: ${STT_URL:?Set STT_URL in .env}
-      STT_MODEL_NAME: ${STT_MODEL_NAME:?Set STT_MODEL_NAME in .env}
       LLM_URL: ${LLM_URL:-}
       LLM_MODEL_NAME: ${LLM_MODEL_NAME:-}
-      DISPATCH_WEBHOOK_URL: ${DISPATCH_WEBHOOK_URL:-}
-      DISPATCH_WEBHOOK_AUTH_HEADER: ${DISPATCH_WEBHOOK_AUTH_HEADER:-}
-      DISPATCH_WEBHOOK_AUTH_VALUE: ${DISPATCH_WEBHOOK_AUTH_VALUE:-}
+      NOTEDISCOVERY_API_URL: ${NOTEDISCOVERY_API_URL:?Set NOTEDISCOVERY_API_URL in .env}
       DATA_DIR: /data
       NOTIFICATION_MODE: ${NOTIFICATION_MODE:-normal}
       PUSHOVER_API_TOKEN: ${PUSHOVER_API_TOKEN:-}
@@ -35,4 +26,6 @@ services:
       TZ: ${TZ:-Europe/Berlin}
     volumes:
       - ${HOST_DATA_DIR:-./data}:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

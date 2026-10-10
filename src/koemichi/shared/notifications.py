@@ -158,7 +158,7 @@ def dispatched_notification(
     method: str | None,
     confidence: float | None,
 ) -> NotificationDraft:
-    """Build the notification emitted after the webhook accepts a dispatch.
+    """Build the notification emitted after an intent workflow completes.
 
     Parameters
     ----------
@@ -186,6 +186,26 @@ def dispatched_notification(
         event_key=f"{note_id}:dispatched",
         message=f"Voice note [{short_id}] routed as {intent}.",
         debug_message=debug_message,
+    )
+
+
+def memo_draft_notification(note_id: UUID) -> NotificationDraft:
+    """Build a debug-only event after a memo draft is durably persisted."""
+    return NotificationDraft(
+        event_key=f"{note_id}:memo-draft",
+        message=f"Memo draft prepared [{_short_id(note_id)}].",
+        priority=-1,
+        debug_only=True,
+    )
+
+
+def journal_draft_notification(note_id: UUID) -> NotificationDraft:
+    """Build a debug-only event after a journal draft is durably persisted."""
+    return NotificationDraft(
+        event_key=f"{note_id}:journal-draft",
+        message=f"Journal draft prepared [{_short_id(note_id)}].",
+        priority=-1,
+        debug_only=True,
     )
 
 

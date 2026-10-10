@@ -69,6 +69,21 @@ class ClassificationResult:
 _classifier: Agent[None, IntentDecision] | None = None
 
 
+def validate_classifier_config() -> tuple[str, str]:
+    """Validate and return configuration for the classifier's LLM fallback."""
+    if not LLM_URL or not LLM_MODEL_NAME:
+        missing = [
+            name
+            for name, value in (
+                ("LLM_URL", LLM_URL),
+                ("LLM_MODEL_NAME", LLM_MODEL_NAME),
+            )
+            if not value
+        ]
+        raise RuntimeError("Classifier config missing: " + ", ".join(missing))
+    return LLM_URL, LLM_MODEL_NAME
+
+
 def _get_classifier() -> Agent[None, IntentDecision]:
     """Create the intent agent on first use and return the cached instance.
 
@@ -87,14 +102,11 @@ def _get_classifier() -> Agent[None, IntentDecision]:
     if _classifier is not None:
         return _classifier
 
-    if not LLM_URL or not LLM_MODEL_NAME:
-        raise RuntimeError(
-            "Router needs LLM_URL and LLM_MODEL_NAME to classify with the LLM"
-        )
+    model_url, model_name = validate_classifier_config()
 
     model = OpenAIChatModel(
-        LLM_MODEL_NAME,
-        provider=OpenAIProvider(base_url=LLM_URL),
+        model_name,
+        provider=OpenAIProvider(base_url=model_url),
     )
     _classifier = Agent(
         model,

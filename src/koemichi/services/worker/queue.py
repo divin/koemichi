@@ -29,9 +29,8 @@ BASE_RETRY_SECONDS = 5
 
 
 class Stage(StrEnum):
-    """Pipeline stage associated with a claimed note."""
+    """Routing stage associated with a claimed transcript."""
 
-    TRANSCRIBE = "transcription"
     CLASSIFY = "classification"
     DISPATCH = "dispatch"
 
@@ -92,7 +91,6 @@ def _ready_status(stage: Stage) -> NoteStatus:
         Status representing pending work for ``stage``.
     """
     return {
-        Stage.TRANSCRIBE: NoteStatus.RECEIVED,
         Stage.CLASSIFY: NoteStatus.TRANSCRIBED,
         Stage.DISPATCH: NoteStatus.ROUTED,
     }[stage]
@@ -112,7 +110,6 @@ def _running_status(stage: Stage) -> NoteStatus:
         Status representing an active claim for ``stage``.
     """
     return {
-        Stage.TRANSCRIBE: NoteStatus.TRANSCRIBING,
         Stage.CLASSIFY: NoteStatus.ROUTING,
         Stage.DISPATCH: NoteStatus.ROUTED,
     }[stage]
@@ -133,7 +130,7 @@ def recover_expired_claims(now: datetime) -> None:
     with Session(engine) as session:
         interrupted = session.exec(
             select(Note).where(
-                columns.status.in_([NoteStatus.TRANSCRIBING, NoteStatus.ROUTING]),
+                columns.status == NoteStatus.ROUTING,
                 expired_lease,
             )
         ).all()
@@ -146,12 +143,9 @@ def recover_expired_claims(now: datetime) -> None:
         ).all()
 
         for note in [*interrupted, *dispatches]:
-            if note.status == NoteStatus.TRANSCRIBING:
-                stage = Stage.TRANSCRIBE
-            elif note.status == NoteStatus.ROUTING:
-                stage = Stage.CLASSIFY
-            else:
-                stage = Stage.DISPATCH
+            stage = (
+                Stage.CLASSIFY if note.status == NoteStatus.ROUTING else Stage.DISPATCH
+            )
 
             note.lease_expires_at = None
             if note.attempt_count >= MAX_ATTEMPTS:
@@ -200,9 +194,7 @@ def claim_next_note(now: datetime) -> ClaimedNote | None:
         note = session.exec(
             select(Note)
             .where(
-                columns.status.in_(
-                    [NoteStatus.RECEIVED, NoteStatus.TRANSCRIBED, NoteStatus.ROUTED]
-                ),
+                columns.status.in_([NoteStatus.TRANSCRIBED, NoteStatus.ROUTED]),
                 eligible,
                 columns.lease_expires_at.is_(None),
             )
@@ -213,12 +205,9 @@ def claim_next_note(now: datetime) -> ClaimedNote | None:
             return None
 
         ready_status = note.status
-        if ready_status == NoteStatus.RECEIVED:
-            stage = Stage.TRANSCRIBE
-        elif ready_status == NoteStatus.TRANSCRIBED:
-            stage = Stage.CLASSIFY
-        else:
-            stage = Stage.DISPATCH
+        stage = (
+            Stage.CLASSIFY if ready_status == NoteStatus.TRANSCRIBED else Stage.DISPATCH
+        )
         claimed_status = _running_status(stage)
         lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
         result = session.exec(
@@ -297,7 +286,13 @@ def complete_stage(
         session.commit()
 
 
-def record_failure(claim: ClaimedNote, now: datetime, exc: Exception) -> None:
+def record_failure(
+    claim: ClaimedNote,
+    now: datetime,
+    exc: Exception,
+    *,
+    retryable: bool = True,
+) -> None:
     """Schedule a retry or mark the note terminal after its final attempt.
 
     Parameters
@@ -308,9 +303,16 @@ def record_failure(claim: ClaimedNote, now: datetime, exc: Exception) -> None:
         Failure time as naive UTC or timezone-aware UTC.
     exc : Exception
         Exception raised while processing the stage. Only its type is stored.
+    retryable : bool, optional
+        Whether a transient failure should be retried. Permanent failures are
+        marked terminal immediately.
     """
     attempt_count = claim.note.attempt_count
-    if attempt_count >= MAX_ATTEMPTS:
+    if not retryable:
+        status = NoteStatus.ERROR
+        next_attempt_at = None
+        error_message = f"{claim.stage.value} is not implemented ({type(exc).__name__})"
+    elif attempt_count >= MAX_ATTEMPTS:
         status = NoteStatus.ERROR
         next_attempt_at = None
         error_message = (

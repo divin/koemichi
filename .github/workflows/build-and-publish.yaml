@@ -17,9 +17,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      WEBHOOK_TOKEN: ci-test-token
-      STT_URL: http://localhost:8080/v1/audio/transcriptions
-      STT_MODEL_NAME: ci-test-model
+      TRANSCRIPT_INGEST_TOKEN: ci-test-token
 
     steps:
       - name: Checkout
@@ -50,6 +48,19 @@ jobs:
       - name: Check types
         run: uv run ty check .
 
+      - name: Build Docker image
+        run: docker build --tag koemichi:ci .
+
+      - name: Smoke-test image as non-root
+        run: |
+          docker run --rm --entrypoint python koemichi:ci -c '
+          import os
+          assert os.geteuid() != 0, "container must run as non-root"
+          from koemichi.services.intake.main import app
+          from koemichi.services.worker.runner import process_next_note
+          print("container imports passed")
+          '
+
   publish:
     needs: test
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
@@ -67,6 +78,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=true
           tags: |
             type=ref,event=tag
 

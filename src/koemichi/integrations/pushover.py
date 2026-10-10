@@ -21,6 +21,15 @@ class PushoverError(Exception):
     """
 
     def __init__(self, message: str, *, retryable: bool) -> None:
+        """Initialize an error with a safe message and retry policy.
+
+        Parameters
+        ----------
+        message : str
+            Diagnostic message that excludes credentials.
+        retryable : bool
+            Whether bounded retry should be attempted.
+        """
         super().__init__(message)
         self.retryable = retryable
 

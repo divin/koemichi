@@ -1,7 +1,7 @@
 [project]
 name = "koemichi"
-version = "2.1.0"
-description = "Add your description here"
+version = "3.0.0"
+description = "Transcript intake, intent classification, and Python workflows for voice notes"
 readme = "README.md"
 authors = [
     { name = "divin", email = "71128266+divin@users.noreply.github.com" }
@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.141.1",
+    "fastmcp>=4.1.0",
     "httpx>=0.28.1",
     "pydantic-ai>=2.54.0",
     "python-dotenv>=1.2.3",
@@ -35,6 +36,3 @@ extend-select = ["D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["D"]

@@ -35,8 +35,13 @@ def database_engine(tmp_path: Path) -> Iterator[Engine]:
 
 
 @pytest.fixture
-def client(database_engine: Engine) -> Iterator[TestClient]:
+def client(
+    database_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[TestClient]:
     """Provide a test client connected to the isolated database."""
+    monkeypatch.setattr(
+        intake_main, "TRANSCRIPT_INGEST_TOKEN", "unit-test-ingest-token"
+    )
     original_overrides = intake_main.app.dependency_overrides.copy()
 
     def override_get_session() -> Iterator[Session]:

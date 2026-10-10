@@ -55,14 +55,58 @@ def _note(
     )
 
 
-def test_memo_draft_schema_rejects_empty_output() -> None:
-    """Require a useful generated title and body before any side effects."""
-    with pytest.raises(ValueError):
-        memo.MemoDraft.model_validate({"title": "", "content": ""})
+def test_memo_prompt_preserves_the_transcript_language() -> None:
+    """Require memo fields to retain German or any other source language."""
+    prompt = memo.MEMO_SYSTEM_PROMPT.lower()
+
+    assert "never translate it into another language" in prompt
+    assert "german (deutsch), not english" in prompt
+    assert "preserve the language switches" in prompt
+
+
+def test_memo_draft_schema_requires_grounded_fields_and_rejects_extras() -> None:
+    """Validate structured content and reject agent-chosen workflow fields."""
     with pytest.raises(ValueError):
         memo.MemoDraft.model_validate(
-            {"title": "Title", "content": "Body", "path": "Memo/unsafe.md"}
+            {"title": "", "summary": "", "key_points": [], "explicit_next_steps": []}
         )
+    with pytest.raises(ValueError):
+        memo.MemoDraft.model_validate(
+            {
+                "title": "Title",
+                "summary": "Summary",
+                "key_points": [],
+                "explicit_next_steps": [],
+                "path": "Memo/unsafe.md",
+            }
+        )
+    with pytest.raises(ValueError):
+        memo.MemoDraft.model_validate(
+            {
+                "title": "Title",
+                "summary": "Summary",
+                "key_points": ["  "],
+                "explicit_next_steps": [],
+            }
+        )
+
+
+def test_render_memo_content_uses_fixed_sections_and_omits_empty_lists() -> None:
+    """Render the structured output without model-generated section headings."""
+    draft = memo.MemoDraft(
+        title="Finish the task",
+        summary="Complete the current task before moving on.",
+        key_points=["The task is not finished."],
+        explicit_next_steps=[],
+    )
+
+    assert memo.render_memo_content(draft) == (
+        "# Finish the task\n\n"
+        "## Summary\n\n"
+        "Complete the current task before moving on.\n\n"
+        "## Key points\n\n"
+        "- The task is not finished."
+    )
 
 
 def test_memo_draft_notification_is_debug_only_and_safe() -> None:
@@ -74,6 +118,24 @@ def test_memo_draft_notification_is_debug_only_and_safe() -> None:
     assert notification.debug_only is True
     assert notification.priority == -1
     assert note_id.hex[:8] in notification.message
+
+
+def test_render_memo_content_includes_explicit_next_steps() -> None:
+    """Keep explicitly mentioned next steps in their own fixed section."""
+    draft = memo.MemoDraft(
+        title="Prepare the launch",
+        summary="The launch is planned for next week.",
+        key_points=[],
+        explicit_next_steps=["Send the invitation on Monday."],
+    )
+
+    assert memo.render_memo_content(draft) == (
+        "# Prepare the launch\n\n"
+        "## Summary\n\n"
+        "The launch is planned for next week.\n\n"
+        "## Explicit next steps\n\n"
+        "- Send the invitation on Monday."
+    )
 
 
 def test_recording_date_uses_configured_timezone() -> None:
@@ -131,7 +193,9 @@ async def test_handle_memo_persists_draft_then_writes_deterministically(
             return SimpleNamespace(
                 output=memo.MemoDraft(
                     title="Bakery opening",
-                    content="The bakery is opening next week.",
+                    summary="The bakery is opening next week.",
+                    key_points=["The opening is next week."],
+                    explicit_next_steps=[],
                 )
             )
 
@@ -171,14 +235,24 @@ async def test_handle_memo_persists_draft_then_writes_deterministically(
         saved = session.get(Note, note.id)
     assert saved is not None
     assert saved.memo_title == "Bakery opening"
-    assert saved.memo_content == "The bakery is opening next week."
+    assert saved.memo_content == (
+        "# Bakery opening\n\n"
+        "## Summary\n\n"
+        "The bakery is opening next week.\n\n"
+        "## Key points\n\n"
+        "- The opening is next week."
+    )
     assert saved.memo_path == "Memo/2025-01-01-bakery-opening.md"
     assert calls == [
         ("exists", "Memo/2025-01-01-bakery-opening.md"),
         ("folder", "Memo"),
         (
             "write",
-            "Memo/2025-01-01-bakery-opening.md:The bakery is opening next week.",
+            (
+                "Memo/2025-01-01-bakery-opening.md:# Bakery opening\n\n"
+                "## Summary\n\nThe bakery is opening next week.\n\n"
+                "## Key points\n\n- The opening is next week."
+            ),
         ),
     ]
     assert note.transcript is not None

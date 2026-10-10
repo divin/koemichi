@@ -150,6 +150,65 @@ def test_debug_detail_messages_use_low_priority_and_errors_stay_urgent(
     assert "after 3 attempts (RuntimeError)" in failure_event.message
 
 
+def test_dispatched_notification_includes_saved_note_content(
+    database_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Show the exact NoteDiscovery path and content in normal and debug modes."""
+    normal_note = _create_note(database_engine)
+    debug_note = _create_note(database_engine)
+    path = "Memo/2025-01-01-test.md"
+    content = "# Test memo\n\nThe exact text saved to the vault."
+
+    monkeypatch.setattr(notifications, "NOTIFICATION_MODE", NotificationMode.NORMAL)
+    with Session(database_engine) as session:
+        notifications.enqueue_notification(
+            session,
+            normal_note.id,
+            notifications.dispatched_notification(
+                normal_note.id, "memo", "llm", 0.9, path, content
+            ),
+        )
+        session.commit()
+    normal_event = _outbox_events(database_engine, normal_note.id)[0]
+    assert path in normal_event.message
+    assert content in normal_event.message
+    assert "classifier=" not in normal_event.message
+
+    monkeypatch.setattr(notifications, "NOTIFICATION_MODE", NotificationMode.DEBUG)
+    with Session(database_engine) as session:
+        notifications.enqueue_notification(
+            session,
+            debug_note.id,
+            notifications.dispatched_notification(
+                debug_note.id, "memo", "llm", 0.9, path, content
+            ),
+        )
+        session.commit()
+    debug_event = _outbox_events(database_engine, debug_note.id)[0]
+    assert path in debug_event.message
+    assert content in debug_event.message
+    assert "classifier=llm, confidence=0.90" in debug_event.message
+    assert debug_event.priority == -1
+
+
+def test_saved_note_notification_is_truncated_with_a_marker(
+    database_engine: Engine,
+) -> None:
+    """Limit long saved note bodies to Pushover's message size."""
+    note = _create_note(database_engine)
+    draft = notifications.dispatched_notification(
+        note.id, "journal", "keyword", None, "Journal/2025/01/01.md", "x" * 2_000
+    )
+    with Session(database_engine) as session:
+        notifications.enqueue_notification(session, note.id, draft)
+        session.commit()
+
+    event = _outbox_events(database_engine, note.id)[0]
+    assert len(event.message) == 1024
+    assert event.message.startswith("Journal saved to NoteDiscovery:")
+    assert event.message.endswith("… [truncated]")
+
+
 def test_off_mode_does_not_enqueue_notifications(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:

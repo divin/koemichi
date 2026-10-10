@@ -93,6 +93,8 @@ async def process_next_note(now: datetime | None = None) -> bool:
                     note.intent,
                     note.classification_method,
                     note.classification_confidence,
+                    note.memo_path or note.journal_path,
+                    note.memo_content or note.journal_content,
                 ),
                 status=NoteStatus.DISPATCHED,
             )

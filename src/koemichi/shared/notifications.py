@@ -157,8 +157,10 @@ def dispatched_notification(
     intent: str,
     method: str | None,
     confidence: float | None,
+    note_path: str | None = None,
+    note_content: str | None = None,
 ) -> NotificationDraft:
-    """Build the notification emitted after an intent workflow completes.
+    """Build a completion notice with the exact text saved to NoteDiscovery.
 
     Parameters
     ----------
@@ -170,21 +172,31 @@ def dispatched_notification(
         Classification path, such as ``keyword`` or ``llm``.
     confidence : float or None
         Classifier confidence when the model supplied one.
+    note_path : str or None, optional
+        NoteDiscovery path written by the workflow.
+    note_content : str or None, optional
+        Exact Markdown content written to NoteDiscovery.
 
     Returns
     -------
     NotificationDraft
-        Dispatch event with optional classifier details for debug mode.
+        Note completion event with saved content and optional debug details.
     """
     short_id = _short_id(note_id)
     confidence_text = f"{confidence:.2f}" if confidence is not None else "n/a"
+    label = "Memo" if intent == "memo" else "Journal" if intent == "journal" else intent
+    if note_path and note_content is not None:
+        message = f"{label} saved to NoteDiscovery: {note_path}\n\n{note_content}"
+    else:
+        message = f"Voice note [{short_id}] routed as {intent}."
     debug_message = (
-        f"Voice note [{short_id}] dispatched as {intent}; "
-        f"classifier={method or 'unknown'}, confidence={confidence_text}."
+        f"{message}\n\n"
+        f"Note [{short_id}]; classifier={method or 'unknown'}, "
+        f"confidence={confidence_text}."
     )
     return NotificationDraft(
         event_key=f"{note_id}:dispatched",
-        message=f"Voice note [{short_id}] routed as {intent}.",
+        message=message,
         debug_message=debug_message,
     )
 
@@ -370,7 +382,7 @@ def enqueue_notification(
         note_id=note_id,
         dedupe_key=draft.event_key,
         title="Koemichi",
-        message=message[:1024],
+        message=_truncate_message(message),
         priority=priority,
     )
     statement = (
@@ -393,6 +405,14 @@ def enqueue_notification(
         .on_conflict_do_nothing(index_elements=[NotificationOutbox.dedupe_key])
     )
     session.exec(statement)
+
+
+def _truncate_message(message: str, limit: int = 1024) -> str:
+    """Keep Pushover messages within its limit and mark omitted text clearly."""
+    marker = "… [truncated]"
+    if len(message) <= limit:
+        return message
+    return message[: limit - len(marker)].rstrip() + marker
 
 
 def validate_notification_config() -> None:

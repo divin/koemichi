@@ -50,6 +50,19 @@ def _note() -> Note:
     )
 
 
+def test_journal_prompt_explicitly_preserves_german_and_mixed_languages() -> None:
+    """Make the language invariant explicit for German and code-switched input."""
+    prompt = journal.JOURNAL_SYSTEM_PROMPT.lower()
+
+    assert "never translate" in prompt
+    assert "german (deutsch), not english" in prompt
+    assert "preserve the language switches" in prompt
+    assert "not translated the speaker's words" in prompt
+    assert "journal entry" in prompt
+    assert "tagebucheintrag" in prompt
+    assert "do not add a title or label" in prompt
+
+
 def test_journal_draft_schema_rejects_empty_or_extra_output() -> None:
     """Require a non-empty edited body and prevent agent-chosen file paths."""
     with pytest.raises(ValueError):
@@ -134,7 +147,7 @@ async def test_handle_journal_persists_content_before_creating_note(
         async def run(self, transcript: str) -> SimpleNamespace:
             assert transcript == note.transcript
             return SimpleNamespace(
-                output=journal.JournalDraft(content="I enjoyed the sunshine today.")
+                output=journal.JournalDraft(content="Heute war ein sehr guter Tag.")
             )
 
     calls: list[tuple[str, str]] = []
@@ -173,12 +186,12 @@ async def test_handle_journal_persists_content_before_creating_note(
         saved = session.get(Note, note.id)
     assert saved is not None
     assert saved.journal_path == "Journal/2024/12/2024-12-31.md"
-    assert saved.journal_content == "# 2024-12-31\n\nI enjoyed the sunshine today."
+    assert saved.journal_content == "# 2024-12-31\n\nHeute war ein sehr guter Tag."
     assert calls == [
         ("folder", "Journal/2024/12"),
         (
             "write",
-            "Journal/2024/12/2024-12-31.md:# 2024-12-31\n\nI enjoyed the sunshine today.",
+            "Journal/2024/12/2024-12-31.md:# 2024-12-31\n\nHeute war ein sehr guter Tag.",
         ),
     ]
     assert note.transcript is not None

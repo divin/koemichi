@@ -1,6 +1,6 @@
 [project]
 name = "koemichi"
-version = "3.0.0"
+version = "3.1.0"
 description = "Transcript intake, intent classification, and Python workflows for voice notes"
 readme = "README.md"
 authors = [

@@ -117,6 +117,18 @@ def test_conflicting_reuse_of_note_id_is_rejected(client: TestClient) -> None:
     assert response.status_code == 409
 
 
+def test_receiver_accepts_requests_without_auth_when_token_is_unset(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Allow unauthenticated intake when the optional token is not configured."""
+    monkeypatch.setattr(intake_main, "TRANSCRIPT_INGEST_TOKEN", None)
+
+    response = client.post("/transcripts", json=_payload())
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "accepted"}
+
+
 def test_missing_or_wrong_token_is_rejected(client: TestClient) -> None:
     """Verify the receiver rejects absent and invalid sender credentials."""
     response = client.post("/transcripts", json=_payload())

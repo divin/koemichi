@@ -4,7 +4,7 @@ services:
     ports:
       - "127.0.0.1:${KOEMICHI_PORT:-8001}:8000"
     environment:
-      TRANSCRIPT_INGEST_TOKEN: ${TRANSCRIPT_INGEST_TOKEN:?Set TRANSCRIPT_INGEST_TOKEN in .env}
+      TRANSCRIPT_INGEST_TOKEN: ${TRANSCRIPT_INGEST_TOKEN:-}
       DATA_DIR: /data
       NOTIFICATION_MODE: ${NOTIFICATION_MODE:-normal}
       TZ: ${TZ:-Europe/Berlin}

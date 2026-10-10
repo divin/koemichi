@@ -64,7 +64,7 @@ The FastMCP server is an importable component at `koemichi.services.mcp.server.m
 }
 ```
 
-Authenticate senders with the shared secret in `Authorization: Bearer <TRANSCRIPT_INGEST_TOKEN>`. For Koebako, use the same secret in `TRANSCRIPT_WEBHOOK_AUTH_VALUE`, prefixed with `Bearer `. The payload contains its format version, stable `note_id`, source, recording time in Unix milliseconds, and transcript text. The receiver responds `accepted` after saving a transcript or `duplicate` if that ID was already saved. Reusing an ID with different content returns HTTP `409`; unsupported versions and extra fields are rejected.
+Authentication is optional. If `TRANSCRIPT_INGEST_TOKEN` is set, senders must provide `Authorization: Bearer <token>`; for Koebako, put the same value prefixed with `Bearer ` in `TRANSCRIPT_WEBHOOK_AUTH_VALUE`. If the token is unset, the receiver accepts requests without authentication. That is suitable only for trusted localhost use: Compose binds the receiver to `127.0.0.1` by default, so keep that binding if auth is disabled. The payload contains its format version, stable `note_id`, source, recording time in Unix milliseconds, and transcript text. The receiver responds `accepted` after saving a transcript or `duplicate` if that ID was already saved. Reusing an ID with different content returns HTTP `409`; unsupported versions and extra fields are rejected.
 
 ## 🧠 Classification and intent workflows
 
@@ -90,7 +90,7 @@ Empty transcripts default to `memo` without calling the model. Notes progress th
 
 | Variable | Required? | Purpose |
 |---|---|---|
-| `TRANSCRIPT_INGEST_TOKEN` | Yes | Long, random shared secret; the transcript sender must use the same value. |
+| `TRANSCRIPT_INGEST_TOKEN` | Optional | Long, random shared secret; when set, the transcript sender must use the same Bearer token. Unset disables receiver authentication and should be used only with the default localhost-only Compose binding. |
 | `NOTEDISCOVERY_API_URL` | Memo/journal workflows and MCP tools | Base URL for NoteDiscovery, reachable from the Koemichi worker (and any process importing the MCP server). |
 | `LLM_URL` | Worker | Required address of the model server used when no keyword matches. |
 | `LLM_MODEL_NAME` | Worker | Required model name used for intent classification. |

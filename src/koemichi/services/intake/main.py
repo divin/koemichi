@@ -1,5 +1,6 @@
 """Authenticated receiver for completed transcript payloads."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from hmac import compare_digest
@@ -16,6 +17,7 @@ from koemichi.shared.models.note import Note, NoteSource, NoteStatus
 from koemichi.shared.notifications import enqueue_notification, received_notification
 from koemichi.shared.settings import TRANSCRIPT_INGEST_TOKEN
 
+logger = logging.getLogger(__name__)
 bearer = HTTPBearer(auto_error=False)
 
 
@@ -37,6 +39,12 @@ class TranscriptPayload(BaseModel):
 async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
     """Create the fresh schema on startup and close the pool at shutdown."""
     create_db_and_tables()
+    if TRANSCRIPT_INGEST_TOKEN:
+        logger.info("Transcript receiver Bearer authentication is enabled")
+    else:
+        logger.warning(
+            "Transcript receiver authentication is disabled; keep it on a trusted network"
+        )
     try:
         yield
     finally:
@@ -61,10 +69,7 @@ def verify_transcript_token(
 ) -> None:
     """Authenticate the upstream transcript sender."""
     if not TRANSCRIPT_INGEST_TOKEN:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Transcript receiver authentication is not configured",
-        )
+        return
     if credentials is None or not compare_digest(
         credentials.credentials, TRANSCRIPT_INGEST_TOKEN
     ):

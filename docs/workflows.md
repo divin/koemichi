@@ -19,26 +19,24 @@ Only intents with a registered Python handler are implemented. Currently those a
 
 ### Memo
 
-The specialist returns a typed structure:
+The specialist extracts only a short descriptive title, preserving the transcript's language. Koemichi keeps the transcript itself as the note body without AI rewriting or summarization.
 
-- `title`
-- `summary`
-- `key_points`
-- `explicit_next_steps`
+The note title and filename use the recording's local date and zero-padded time in `TZ`, followed by the descriptive title; for example:
 
-Python renders a fixed Markdown layout with a title and summary, adding key-point and next-step sections only when they are nonempty. The prompt asks for next steps only when the speaker explicitly states them and forbids invented advice or generic report sections.
+```text
+Memo/2025-01-01 14:30 - Meeting with Alice.md
+```
 
-The NoteDiscovery path is `Memo/YYYY-MM-DD-title.md`, using the recording time in `TZ`. Python normalizes the title for the filename, checks for collisions, and adds a numbered suffix when needed.
+Python sanitizes path separators in the title, checks for collisions, and adds a numbered suffix when needed. The Markdown heading uses the same readable title as the filename.
 
 ### Journal
 
-The specialist returns simple prose, not a report, list, or generic label such as “Journal Entry” or “Tagebucheintrag.” Python adds only the date heading and writes to `Journal/YYYY/MM/YYYY-MM-DD.md`. The recording's local date is treated as today; the previous date is preferred when its journal file is available. If destinations already exist, Python adds a numbered suffix instead of overwriting or appending.
+Journal entries are raw transcript text; no AI specialist rewrites them. The recording's local date in `TZ` selects `Journal/YYYY/MM/YYYY-MM-DD.md`. Koemichi creates the dated file when it does not exist and appends each new transcript to the same day's file.
 
-Both specialists are instructed to preserve the transcript's language, including German, and to retain language switches in multilingual input. They should correct clear transcription errors without changing meaning or adding unsupported facts.
+Each append carries a hidden, stable marker derived from the transcript's note ID. On retry, Koemichi checks for that marker before appending, so a timeout after a successful API write does not duplicate the entry. Existing journal content is preserved.
 
 ## Deterministic behavior and retries
 
-Agents only produce typed text fields. Python chooses paths and folders, checks collisions, persists drafts before external writes, and performs the NoteDiscovery API operations. If a NoteDiscovery write fails, a retry reuses the saved draft and path rather than generating a new note.
+Python selects dates and paths, ensures folders, persists memo titles/content and journal transcripts/destinations before external writes, and performs NoteDiscovery API operations. Memo retries reuse the saved title, content, and path. Journal retries reuse the saved transcript and path, and the stable entry marker prevents duplicate appends.
 
-
-The worker stores stage, attempt, lease, and retry state in SQLite. Transcripts move through classification and workflow execution. Temporary failures are retried; exhausted retries and unimplemented intents are marked as errors. `dispatched` means the selected Python workflow completed.
+The worker stores stage, attempt, lease, and retry state in SQLite. Temporary failures are retried; exhausted retries and unimplemented intents are marked as errors. `dispatched` means the selected Python workflow completed.

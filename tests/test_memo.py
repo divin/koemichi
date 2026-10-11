@@ -1,4 +1,4 @@
-"""Tests for deterministic memo generation and NoteDiscovery writes."""
+"""Tests for title-only memo generation and deterministic NoteDiscovery writes."""
 
 import os
 from collections.abc import Iterator
@@ -17,6 +17,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
 from koemichi.services.workflows import memo
+from koemichi.services.workflows.dates import local_recording_date
 from koemichi.shared.models.note import Note, NoteSource, NoteStatus
 from koemichi.shared.notifications import memo_draft_notification
 
@@ -42,6 +43,7 @@ def _note(
     *,
     status: NoteStatus = NoteStatus.ROUTED,
     lease: datetime | None = datetime(2025, 1, 1, tzinfo=UTC),
+    transcript: str = "A transcript about the bakery opening.",
 ) -> Note:
     """Build a persisted memo note snapshot."""
     return Note(
@@ -50,63 +52,64 @@ def _note(
         status=status,
         lease_expires_at=lease,
         recorded_at_ms=1_735_689_600_000,
-        transcript="A transcript about the bakery opening.",
+        transcript=transcript,
         intent="memo",
     )
 
 
-def test_memo_prompt_preserves_the_transcript_language() -> None:
-    """Require memo fields to retain German or any other source language."""
+def test_memo_prompt_requests_only_a_short_descriptive_title() -> None:
+    """Keep the specialist away from transcript rewriting or summarization."""
     prompt = memo.MEMO_SYSTEM_PROMPT.lower()
 
-    assert "never translate it into another language" in prompt
-    assert "german (deutsch), not english" in prompt
-    assert "preserve the language switches" in prompt
+    assert "only a short, descriptive title" in prompt
+    assert "do not summarize, rewrite, correct" in prompt
+    assert "never translate" in prompt
 
 
-def test_memo_draft_schema_requires_grounded_fields_and_rejects_extras() -> None:
-    """Validate structured content and reject agent-chosen workflow fields."""
+def test_memo_title_schema_rejects_empty_or_extra_output() -> None:
+    """Validate the one field the title specialist is allowed to return."""
     with pytest.raises(ValueError):
-        memo.MemoDraft.model_validate(
-            {"title": "", "summary": "", "key_points": [], "explicit_next_steps": []}
-        )
+        memo.MemoTitle.model_validate({"title": "  "})
     with pytest.raises(ValueError):
-        memo.MemoDraft.model_validate(
-            {
-                "title": "Title",
-                "summary": "Summary",
-                "key_points": [],
-                "explicit_next_steps": [],
-                "path": "Memo/unsafe.md",
-            }
-        )
-    with pytest.raises(ValueError):
-        memo.MemoDraft.model_validate(
-            {
-                "title": "Title",
-                "summary": "Summary",
-                "key_points": ["  "],
-                "explicit_next_steps": [],
-            }
-        )
+        memo.MemoTitle.model_validate({"title": "Bakery", "content": "rewritten"})
 
 
-def test_render_memo_content_uses_fixed_sections_and_omits_empty_lists() -> None:
-    """Render the structured output without model-generated section headings."""
-    draft = memo.MemoDraft(
-        title="Finish the task",
-        summary="Complete the current task before moving on.",
-        key_points=["The task is not finished."],
-        explicit_next_steps=[],
+def test_recording_datetime_and_pretty_title_use_local_zero_padded_time() -> None:
+    """Include local date and zero-padded recording time in the display title."""
+    timestamp_ms = int(datetime(2025, 1, 1, 0, 5, tzinfo=UTC).timestamp() * 1000)
+    timezone = ZoneInfo("America/Los_Angeles")
+
+    assert local_recording_date(timestamp_ms, timezone) == date(2024, 12, 31)
+    assert memo.pretty_memo_title(timestamp_ms, "Bakery opening", timezone) == (
+        "2024-12-31 16:05 - Bakery opening"
     )
 
-    assert memo.render_memo_content(draft) == (
-        "# Finish the task\n\n"
-        "## Summary\n\n"
-        "Complete the current task before moving on.\n\n"
-        "## Key points\n\n"
-        "- The task is not finished."
+
+def test_memo_path_uses_readable_title_and_sanitizes_path_separators() -> None:
+    """Keep names human-readable while preventing titles from adding path parts."""
+    assert (
+        memo.memo_note_path(1_735_689_600_000, "Bakery / Café", ZoneInfo("UTC"))
+        == "Memo/2025-01-01 00:00 - Bakery Café.md"
     )
+    assert memo.safe_descriptive_title("東京") == "東京"
+
+
+@pytest.mark.asyncio
+async def test_path_selection_adds_numeric_suffixes() -> None:
+    """Choose the first readable timestamped path not already in the vault."""
+
+    class ExistingNotes:
+        async def note_exists(self, note_path: str) -> bool:
+            return note_path.endswith(".md") and "(2)" not in note_path
+
+    path = await memo.choose_available_path(
+        ExistingNotes(),
+        1_735_689_600_000,
+        "Bakery",
+        ZoneInfo("UTC"),
+    )
+
+    assert path == "Memo/2025-01-01 00:00 - Bakery (2).md"
 
 
 def test_memo_draft_notification_is_debug_only_and_safe() -> None:
@@ -120,68 +123,15 @@ def test_memo_draft_notification_is_debug_only_and_safe() -> None:
     assert note_id.hex[:8] in notification.message
 
 
-def test_render_memo_content_includes_explicit_next_steps() -> None:
-    """Keep explicitly mentioned next steps in their own fixed section."""
-    draft = memo.MemoDraft(
-        title="Prepare the launch",
-        summary="The launch is planned for next week.",
-        key_points=[],
-        explicit_next_steps=["Send the invitation on Monday."],
-    )
-
-    assert memo.render_memo_content(draft) == (
-        "# Prepare the launch\n\n"
-        "## Summary\n\n"
-        "The launch is planned for next week.\n\n"
-        "## Explicit next steps\n\n"
-        "- Send the invitation on Monday."
-    )
-
-
-def test_recording_date_uses_configured_timezone() -> None:
-    """Convert UTC recording instants to the intended local calendar day."""
-    timestamp_ms = int(datetime(2025, 1, 1, 0, 30, tzinfo=UTC).timestamp() * 1000)
-
-    assert memo.local_recording_date(
-        timestamp_ms, ZoneInfo("America/Los_Angeles")
-    ) == date(2024, 12, 31)
-
-
-def test_memo_path_slugifies_title_and_falls_back_when_slug_is_empty() -> None:
-    """Build safe dated paths from agent titles, including Unicode-only titles."""
-    timezone = ZoneInfo("UTC")
-    assert memo.memo_note_path(1_735_689_600_000, "Café & Bakery!", timezone) == (
-        "Memo/2025-01-01-cafe-bakery.md"
-    )
-    assert memo.slugify_title("東京") == "memo"
-
-
 @pytest.mark.asyncio
-async def test_path_selection_adds_numeric_suffixes() -> None:
-    """Choose the first path not already present in NoteDiscovery."""
-
-    class ExistingNotes:
-        async def note_exists(self, note_path: str) -> bool:
-            return note_path.endswith(".md") and "(2)" not in note_path
-
-    path = await memo.choose_available_path(
-        ExistingNotes(),
-        1_735_689_600_000,
-        "Bakery",
-        ZoneInfo("UTC"),  # type: ignore[arg-type]
-    )
-
-    assert path == "Memo/2025-01-01-bakery (2).md"
-
-
-@pytest.mark.asyncio
-async def test_handle_memo_persists_draft_then_writes_deterministically(
+async def test_handle_memo_persists_title_and_raw_transcript_before_writing(
     database_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Persist the agent result before folder/note writes and avoid logging text."""
-    note = _note()
+    """Use the LLM only for a title and save the original transcript unchanged."""
+    raw_transcript = "  We open on Friday.\nI said, 'maybe at 8?'  "
+    note = _note(transcript=raw_transcript)
     with Session(database_engine) as session:
         session.add(note)
         session.commit()
@@ -189,15 +139,8 @@ async def test_handle_memo_persists_draft_then_writes_deterministically(
 
     class FakeAgent:
         async def run(self, transcript: str) -> SimpleNamespace:
-            assert transcript == "A transcript about the bakery opening."
-            return SimpleNamespace(
-                output=memo.MemoDraft(
-                    title="Bakery opening",
-                    summary="The bakery is opening next week.",
-                    key_points=["The opening is next week."],
-                    explicit_next_steps=[],
-                )
-            )
+            assert transcript == raw_transcript.strip()
+            return SimpleNamespace(output=memo.MemoTitle(title="Bakery opening"))
 
     calls: list[tuple[str, str | None]] = []
 
@@ -231,43 +174,32 @@ async def test_handle_memo_persists_draft_then_writes_deterministically(
 
     await memo.handle_memo(note)
 
+    pretty_title = "2025-01-01 00:00 - Bakery opening"
+    expected_path = f"Memo/{pretty_title}.md"
+    expected_content = f"# {pretty_title}\n\n{raw_transcript.strip()}"
     with Session(database_engine) as session:
         saved = session.get(Note, note.id)
     assert saved is not None
-    assert saved.memo_title == "Bakery opening"
-    assert saved.memo_content == (
-        "# Bakery opening\n\n"
-        "## Summary\n\n"
-        "The bakery is opening next week.\n\n"
-        "## Key points\n\n"
-        "- The opening is next week."
-    )
-    assert saved.memo_path == "Memo/2025-01-01-bakery-opening.md"
+    assert saved.memo_title == pretty_title
+    assert saved.memo_content == expected_content
+    assert saved.memo_path == expected_path
     assert calls == [
-        ("exists", "Memo/2025-01-01-bakery-opening.md"),
+        ("exists", expected_path),
         ("folder", "Memo"),
-        (
-            "write",
-            (
-                "Memo/2025-01-01-bakery-opening.md:# Bakery opening\n\n"
-                "## Summary\n\nThe bakery is opening next week.\n\n"
-                "## Key points\n\n- The opening is next week."
-            ),
-        ),
+        ("write", f"{expected_path}:{expected_content}"),
     ]
-    assert note.transcript is not None
-    assert note.transcript not in caplog.text
+    assert raw_transcript not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_retry_reuses_persisted_draft_without_calling_agent(
+async def test_retry_reuses_persisted_memo_without_calling_agent(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Retry the same NoteDiscovery path and content without regenerating."""
+    """Retries write the exact persisted title, content, and destination."""
     note = _note()
-    note.memo_title = "Saved title"
-    note.memo_content = "Saved memo body"
-    note.memo_path = "Memo/2025-01-01-saved-title.md"
+    note.memo_title = "2025-01-01 00:00 - Saved title"
+    note.memo_content = f"# {note.memo_title}\n\nSaved raw transcript"
+    note.memo_path = f"Memo/{note.memo_title}.md"
     with Session(database_engine) as session:
         session.add(note)
         session.commit()
@@ -284,12 +216,12 @@ async def test_retry_reuses_persisted_draft_without_calling_agent(
         async def create_or_update_note(
             self, path: str, content: str
         ) -> dict[str, object]:
-            assert path == "Memo/2025-01-01-saved-title.md"
-            assert content == "Saved memo body"
+            assert path == note.memo_path
+            assert content == note.memo_content
             return {"success": True}
 
     def unexpected_agent() -> object:
-        raise AssertionError("retry must not regenerate the memo")
+        raise AssertionError("retry must not regenerate the memo title")
 
     monkeypatch.setattr(memo, "_get_memo_agent", unexpected_agent)
     monkeypatch.setattr(memo, "NoteDiscoveryClient", FakeClient)
@@ -312,7 +244,7 @@ def test_persist_memo_draft_requires_current_worker_lease(
     with pytest.raises(RuntimeError, match="lease may be stale"):
         memo.persist_memo_draft(
             note,
-            "Title",
-            "Content",
-            "Memo/2025-01-01-title.md",
+            "2025-01-01 00:00 - Title",
+            "# Title\n\nTranscript",
+            "Memo/2025-01-01 00:00 - Title.md",
         )

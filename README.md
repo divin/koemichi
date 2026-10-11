@@ -17,7 +17,7 @@ flowchart LR
     D --> H[Pushover outbox]
 ```
 
-The receiver stores transcripts; a separate worker classifies and processes them. Work and notifications are persisted in SQLite and retried as needed. I use NoteDiscovery for my notes. I added read-only search, list, and fetch capabilities so compatible language-model clients can consult the existing vault; deterministic Python workflows still choose paths and handle all writes. Specialist agents transform transcript text into structured output, while Koemichi controls persistence and side effects.
+The receiver stores transcripts; a separate worker classifies and processes them. Work and notifications are persisted in SQLite and retried as needed. I use NoteDiscovery for my notes. I added read-only search, list, and fetch capabilities so compatible language-model clients can consult the existing vault; deterministic Python workflows still choose paths and handle all writes. The memo specialist extracts only a title; memo bodies and journal entries preserve the raw transcript.
 
 ## 🚀 Quick start
 
@@ -45,7 +45,7 @@ The example Compose file maps host port `8001` to container port `8000` on all h
 
 ## 🧠 Intent workflows
 
-Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo and Journal have Python workflows; Todo and Research are not implemented and fail explicitly. Memo uses a fixed structured layout. Journal is simple prose, with prompts to preserve the source language—including German—and multilingual passages. See [classification and workflows](docs/workflows.md).
+Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo and Journal have Python workflows; Todo and Research are not implemented and fail explicitly. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day. See [classification and workflows](docs/workflows.md).
 
 ## 🔔 Notifications
 

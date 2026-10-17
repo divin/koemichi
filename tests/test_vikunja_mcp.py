@@ -124,6 +124,8 @@ def test_configured_client_derives_mcp_url_from_api_url(
     monkeypatch.setattr(vikunja_mcp_module, "_configured_client", None)
     monkeypatch.setattr(vikunja_mcp_module, "VIKUNJA_MCP_URL", None)
     monkeypatch.setattr(vikunja_mcp_module, "VIKUNJA_API_URL", "https://vikunja.test")
+    monkeypatch.setattr(vikunja_mcp_module, "VIKUNJA_API_TOKEN", "tk_test")
+    monkeypatch.setattr(vikunja_mcp_module, "VIKUNJA_PROJECT_ID", 7)
     monkeypatch.setattr(vikunja_mcp_module, "VikunjaClient", fake_vikunja_client)
 
     vikunja_mcp_module.get_configured_client()

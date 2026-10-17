@@ -16,6 +16,18 @@ DATABASE_PATH: Path = Path(os.getenv("DATABASE_PATH") or DATA_DIR / "koemichi.db
 
 TRANSCRIPT_INGEST_TOKEN: str | None = os.getenv("TRANSCRIPT_INGEST_TOKEN") or None
 NOTEDISCOVERY_API_URL: str | None = os.getenv("NOTEDISCOVERY_API_URL") or None
+
+# Vikunja inbox used by the todo workflow and its MCP tools.
+VIKUNJA_API_URL: str | None = os.getenv("VIKUNJA_API_URL") or None
+VIKUNJA_API_TOKEN: str | None = os.getenv("VIKUNJA_API_TOKEN") or None
+_vikunja_project_id = os.getenv("VIKUNJA_PROJECT_ID")
+VIKUNJA_PROJECT_ID: int | None = (
+    int(_vikunja_project_id) if _vikunja_project_id else None
+)
+# Optional override for Vikunja's built-in MCP endpoint; defaults to
+# ``{VIKUNJA_API_URL}/api/v2/mcp``.
+VIKUNJA_MCP_URL: str | None = os.getenv("VIKUNJA_MCP_URL") or None
+
 TIMEZONE = ZoneInfo(os.getenv("TZ") or "Europe/Berlin")
 
 # Local LLM endpoint for intent classification, if keyword matching does not apply.

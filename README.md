@@ -13,15 +13,15 @@ flowchart LR
     C --> D[Worker]
     D --> E[Keyword match or LLM classification]
     E --> F[Python intent workflow]
-    F --> G[NoteDiscovery]
+    F --> G[NoteDiscovery / Vikunja]
     D --> H[Pushover outbox]
 ```
 
-The receiver stores transcripts; a separate worker classifies and processes them. Work and notifications are persisted in SQLite and retried as needed. I use NoteDiscovery for my notes. I added read-only search, list, and fetch capabilities so compatible language-model clients can consult the existing vault; deterministic Python workflows still choose paths and handle all writes. The memo specialist extracts only a title; memo bodies and journal entries preserve the raw transcript.
+The receiver stores transcripts; a separate worker classifies and processes them. Work and notifications are persisted in SQLite and retried as needed. I use NoteDiscovery for my notes. I added read-only search, list, and fetch capabilities so compatible language-model clients can consult the existing vault; deterministic Python workflows still choose paths and handle all writes. The memo specialist extracts only a title; memo bodies and journal entries preserve the raw transcript. The todo specialist creates tasks in my Vikunja inbox through Vikunja's built-in MCP server.
 
 ## 🚀 Quick start
 
-1. Copy `example.env` to `.env`; set a reachable NoteDiscovery URL, OpenAI-compatible LLM URL/model, and Pushover credentials (or set notifications to `off`). See [deployment and configuration](docs/deployment.md).
+1. Copy `example.env` to `.env`; set a reachable NoteDiscovery URL, Vikunja settings (API URL, a `tk_...` token with `mcp:access` scope, and the inbox project id), an OpenAI-compatible LLM URL/model, and Pushover credentials (or set notifications to `off`). See [deployment and configuration](docs/deployment.md).
 2. Create a data directory writable by the container's UID/GID `1000:1000`:
 
    ```sh
@@ -45,11 +45,11 @@ The example Compose file maps host port `8001` to container port `8000` on all h
 
 ## 🧠 Intent workflows
 
-Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo and Journal have Python workflows; Todo and Research are not implemented and fail explicitly. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day. See [classification and workflows](docs/workflows.md).
+Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo, Journal, and Todo have Python workflows; Research is recognized but not implemented and fails explicitly. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day; Todo tasks are added to the configured Vikunja inbox via Vikunja's built-in MCP server. See [classification and workflows](docs/workflows.md).
 
 ## 🔔 Notifications
 
-Pushover reports accepted transcripts, completed workflows, retries, and terminal failures. Workflow-completion notices include the NoteDiscovery path and saved note text; messages longer than 1,024 characters are marked as truncated. Transcript and note text are personal data, so see [notifications and privacy](docs/notifications.md).
+Pushover reports accepted transcripts, completed workflows, retries, and terminal failures. Memo and Journal completion notices include the NoteDiscovery path and saved note text; Todo notices include the created Vikunja task title. Messages longer than 1,024 characters are marked as truncated. Transcript and note text are personal data, so see [notifications and privacy](docs/notifications.md).
 
 ## 🧪 Development
 

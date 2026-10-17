@@ -4,7 +4,7 @@ Koemichi writes notification events to its SQLite outbox. The worker sends them 
 
 | Mode | Behavior |
 |---|---|
-| `normal` | A notice when a transcript is accepted, another when its Memo or Journal workflow completes, and an urgent notice for a terminal processing failure. The completion notice includes the NoteDiscovery path and saved memo content or journal transcript. |
+| `normal` | A notice when a transcript is accepted, another when its Memo, Journal, or Todo workflow completes, and an urgent notice for a terminal processing failure. Memo and Journal completion notices include the NoteDiscovery path and saved content; Todo notices include the created Vikunja task title. |
 | `debug` | Normal notices plus low-priority processing, retry, and recovery details. Completion notices also include classifier information; terminal failures remain urgent. |
 | `off` | No notifications are queued or delivered; Pushover credentials are not required. |
 

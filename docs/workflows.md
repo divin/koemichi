@@ -15,7 +15,7 @@ Phrase matching is case-insensitive. See `src/koemichi/services/router/intents.p
 
 ## Implemented workflows
 
-Only intents with a registered Python handler are implemented. Currently those are Memo and Journal. Todo and Research are recognized, but fail explicitly as unimplemented; there is no n8n or webhook fallback.
+Only intents with a registered Python handler are implemented. Currently those are Memo, Journal, and Todo. Research is recognized, but fails explicitly as unimplemented; there is no n8n or webhook fallback.
 
 ### Memo
 
@@ -39,4 +39,10 @@ Each append carries a hidden, stable marker derived from the transcript's note I
 
 Python selects dates and paths, ensures folders, persists memo titles/content and journal transcripts/destinations before external writes, and performs NoteDiscovery API operations. Memo retries reuse the saved title, content, and path. Journal retries reuse the saved transcript and path, and the stable entry marker prevents duplicate appends.
 
-The worker stores stage, attempt, lease, and retry state in SQLite. Temporary failures are retried; exhausted retries and unimplemented intents are marked as errors. `dispatched` means the selected Python workflow completed.
+### Todo
+
+A PydanticAI specialist extracts a task title, an optional description, and an optional due date, then creates the task in the dedicated Vikunja inbox via Vikunja's built-in MCP server. The specialist is the only component that writes: it is given the `add_task` MCP tool. It sets a due date only when the transcript explicitly states a concrete date and never infers one such as "tomorrow" or "next week".
+
+Application code stays deterministic around the write: it validates the Vikunja configuration, persists the extracted task draft under the worker lease, and lists the inbox project to verify an equivalent task is not already present before the agent's write is relied on or completed. A task that is already present in the inbox is never created again, which also makes retries idempotent after a crash between the agent's write and the draft persistence.
+
+Todo retries reuse the persisted task draft instead of re-extracting. Temporary failures are retried; exhausted retries and unimplemented intents are marked as errors. `dispatched` means the selected Python workflow completed.

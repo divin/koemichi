@@ -159,8 +159,9 @@ def dispatched_notification(
     confidence: float | None,
     note_path: str | None = None,
     note_content: str | None = None,
+    todo_title: str | None = None,
 ) -> NotificationDraft:
-    """Build a completion notice with the exact text saved to NoteDiscovery.
+    """Build a completion notice describing where the note was dispatched.
 
     Parameters
     ----------
@@ -173,19 +174,31 @@ def dispatched_notification(
     confidence : float or None
         Classifier confidence when the model supplied one.
     note_path : str or None, optional
-        NoteDiscovery path written by the workflow.
+        NoteDiscovery path written by the memo/journal workflow.
     note_content : str or None, optional
         Exact Markdown content written to NoteDiscovery.
+    todo_title : str or None, optional
+        Vikunja task title created by the todo workflow.
 
     Returns
     -------
     NotificationDraft
-        Note completion event with saved content and optional debug details.
+        Note completion event with saved task/note details and optional debug info.
     """
     short_id = _short_id(note_id)
     confidence_text = f"{confidence:.2f}" if confidence is not None else "n/a"
-    label = "Memo" if intent == "memo" else "Journal" if intent == "journal" else intent
-    if note_path and note_content is not None:
+    label = (
+        "Memo"
+        if intent == "memo"
+        else "Journal"
+        if intent == "journal"
+        else "Todo"
+        if intent == "todo"
+        else intent
+    )
+    if todo_title:
+        message = f"Todo added to Vikunja: {todo_title}"
+    elif note_path and note_content is not None:
         message = f"{label} saved to NoteDiscovery: {note_path}\n\n{note_content}"
     else:
         message = f"Voice note [{short_id}] routed as {intent}."
@@ -216,6 +229,16 @@ def journal_draft_notification(note_id: UUID) -> NotificationDraft:
     return NotificationDraft(
         event_key=f"{note_id}:journal-draft",
         message=f"Journal draft prepared [{_short_id(note_id)}].",
+        priority=-1,
+        debug_only=True,
+    )
+
+
+def todo_draft_notification(note_id: UUID) -> NotificationDraft:
+    """Build a debug-only event after a todo draft is durably persisted."""
+    return NotificationDraft(
+        event_key=f"{note_id}:todo-draft",
+        message=f"Todo draft prepared [{_short_id(note_id)}].",
         priority=-1,
         debug_only=True,
     )

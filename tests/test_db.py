@@ -30,15 +30,19 @@ def test_concurrent_process_startup_initializes_shared_schema_once(
         with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(lambda _: db.create_db_and_tables(), range(2)))
         columns = {column["name"] for column in inspect(engine).get_columns("note")}
-        assert {"memo_title", "journal_content", "journal_path"}.issubset(columns)
+        assert {
+            "memo_title",
+            "journal_content",
+            "journal_path",
+            "todo_title",
+            "todo_due_date",
+        }.issubset(columns)
     finally:
         engine.dispose()
 
 
-def test_existing_schema_gets_memo_workflow_columns(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """Add memo draft columns without losing existing persisted notes."""
+def test_existing_schema_gets_workflow_columns(tmp_path: Path, monkeypatch) -> None:
+    """Add memo, journal, and todo draft columns without losing notes."""
     database_path = tmp_path / "legacy.db"
     engine = db.create_engine(f"sqlite:///{database_path}")
     with engine.begin() as connection:
@@ -72,6 +76,9 @@ def test_existing_schema_gets_memo_workflow_columns(
             "memo_path",
             "journal_content",
             "journal_path",
+            "todo_title",
+            "todo_description",
+            "todo_due_date",
         }.issubset(columns)
     finally:
         engine.dispose()

@@ -33,6 +33,7 @@ The worker needs:
 
 - `NOTEDISCOVERY_API_URL`: a NoteDiscovery base URL reachable from the worker.
 - `LLM_URL` and `LLM_MODEL_NAME`: an OpenAI-compatible model endpoint and the model ID it serves. Both must be configured even though keyword matches avoid a model request.
+- `VIKUNJA_API_URL`, `VIKUNJA_API_TOKEN`, and `VIKUNJA_PROJECT_ID`: Vikunja origin, a `tk_...` API token with the `mcp:access` scope, and the numeric id of the dedicated inbox project for voice-captured todos. `VIKUNJA_MCP_URL` optionally overrides the MCP endpoint (defaults to `${VIKUNJA_API_URL}/api/v2/mcp`).
 
 If NoteDiscovery or the model server runs in another container, connect the worker to a shared Docker network or use an address reachable from its container. On Linux, `host.docker.internal` is mapped to the host gateway by Compose. The example uses this for NoteDiscovery; change it when your deployment differs.
 
@@ -48,6 +49,10 @@ If another container sends requests, `127.0.0.1` on the host is not reachable fr
 |---|---|---|
 | `TRANSCRIPT_INGEST_TOKEN` | Optional | Bearer token for `POST /transcripts`; unset disables authentication. |
 | `NOTEDISCOVERY_API_URL` | Yes for startup/workflows | NoteDiscovery base URL reachable by the worker. |
+| `VIKUNJA_API_URL` | Yes for startup/workflows | Vikunja origin reachable by the worker. |
+| `VIKUNJA_API_TOKEN` | Yes for startup/workflows | Vikunja `tk_...` API token with `mcp:access` scope. |
+| `VIKUNJA_PROJECT_ID` | Yes for startup/workflows | Numeric id of the inbox project todos are added to. |
+| `VIKUNJA_MCP_URL` | No | Overrides Vikunja's MCP endpoint; defaults to `${VIKUNJA_API_URL}/api/v2/mcp`. |
 | `LLM_URL` | Worker | OpenAI-compatible language-model API base URL. |
 | `LLM_MODEL_NAME` | Worker | Model ID accepted by the configured model server. |
 | `NOTIFICATION_MODE` | No | `normal` by default; supports `normal`, `debug`, and `off`. |

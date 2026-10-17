@@ -6,6 +6,8 @@ a minimal surface: ``add_task`` takes just ``title``, ``description``, and
 and are never agent inputs.
 """
 
+import logging
+
 from fastmcp import FastMCP
 
 from koemichi.integrations.vikunja import (
@@ -19,6 +21,8 @@ from koemichi.shared.settings import (
     VIKUNJA_MCP_URL,
     VIKUNJA_PROJECT_ID,
 )
+
+logger = logging.getLogger(__name__)
 
 mcp = FastMCP("Koemichi Vikunja")
 
@@ -44,6 +48,7 @@ def get_configured_client() -> VikunjaClient:
     if not VIKUNJA_API_URL or not VIKUNJA_API_TOKEN or VIKUNJA_PROJECT_ID is None:
         raise RuntimeError("Vikunja configuration is incomplete")
     mcp_url = VIKUNJA_MCP_URL or f"{VIKUNJA_API_URL.rstrip('/')}{VIKUNJA_MCP_PATH}"
+    logger.info("Connecting to Vikunja MCP endpoint %s", mcp_url)
     _configured_client = VikunjaClient(
         mcp_url,
         token=VIKUNJA_API_TOKEN,

@@ -109,11 +109,15 @@ async def process_next_note(now: datetime | None = None) -> bool:
             exc,
             retryable=not isinstance(exc, UnimplementedIntentError),
         )
+        cause = str(exc).strip() or type(exc).__name__
+        if len(cause) > 500:
+            cause = f"{cause[:497]}..."
         logger.error(
-            "%s failed for note %s (%s)",
+            "%s failed for note %s (%s): %s",
             claim.stage.value,
             note.id,
             type(exc).__name__,
+            cause,
         )
 
     return True

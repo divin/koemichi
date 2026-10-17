@@ -33,7 +33,9 @@ The worker needs:
 
 - `NOTEDISCOVERY_API_URL`: a NoteDiscovery base URL reachable from the worker.
 - `LLM_URL` and `LLM_MODEL_NAME`: an OpenAI-compatible model endpoint and the model ID it serves. Both must be configured even though keyword matches avoid a model request.
-- `VIKUNJA_API_URL`, `VIKUNJA_API_TOKEN`, and `VIKUNJA_PROJECT_ID`: Vikunja origin, a `tk_...` API token with the `mcp:access` scope, and the numeric id of the dedicated inbox project for voice-captured todos. `VIKUNJA_MCP_URL` optionally overrides the MCP endpoint (defaults to `${VIKUNJA_API_URL}/api/v2/mcp`).
+- `VIKUNJA_API_URL`, `VIKUNJA_API_TOKEN`, and `VIKUNJA_PROJECT_ID`: Vikunja origin, a `tk_...` API token with the `mcp:access` scope, and the numeric id of the dedicated inbox project for voice-captured todos. `VIKUNJA_MCP_URL` optionally overrides the MCP endpoint (defaults to `${VIKUNJA_API_URL}/api/v2/mcp`); it is forwarded to the worker container.
+
+The Vikunja host must resolve from **inside the worker container**. The worker connects to Vikunja's built-in streamable-HTTP MCP server (`/api/v2/mcp`), so use an address the container can resolve and route to: a LAN IP (like the NoteDiscovery example below), a shared Docker network service name, or `host.docker.internal` when Vikunja runs on the host. A hostname only resolvable on the host machine will fail in the worker with `Temporary failure in name resolution`; the worker logs the resolved endpoint at startup as `Connecting to Vikunja MCP endpoint ...`.
 
 If NoteDiscovery or the model server runs in another container, connect the worker to a shared Docker network or use an address reachable from its container. On Linux, `host.docker.internal` is mapped to the host gateway by Compose. The example uses this for NoteDiscovery; change it when your deployment differs.
 
@@ -52,7 +54,7 @@ If another container sends requests, `127.0.0.1` on the host is not reachable fr
 | `VIKUNJA_API_URL` | Yes for startup/workflows | Vikunja origin reachable by the worker. |
 | `VIKUNJA_API_TOKEN` | Yes for startup/workflows | Vikunja `tk_...` API token with `mcp:access` scope. |
 | `VIKUNJA_PROJECT_ID` | Yes for startup/workflows | Numeric id of the inbox project todos are added to. |
-| `VIKUNJA_MCP_URL` | No | Overrides Vikunja's MCP endpoint; defaults to `${VIKUNJA_API_URL}/api/v2/mcp`. |
+| `VIKUNJA_MCP_URL` | No | Overrides Vikunja's MCP endpoint; defaults to `${VIKUNJA_API_URL}/api/v2/mcp`. Passed through to the worker by Compose. |
 | `LLM_URL` | Worker | OpenAI-compatible language-model API base URL. |
 | `LLM_MODEL_NAME` | Worker | Model ID accepted by the configured model server. |
 | `NOTIFICATION_MODE` | No | `normal` by default; supports `normal`, `debug`, and `off`. |

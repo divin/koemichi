@@ -64,6 +64,15 @@ def test_journal_path_uses_recording_local_calendar_date() -> None:
     assert journal.journal_path_for_date(day) == "Journal/2024/12/2024-12-31.md"
 
 
+def test_journal_path_uses_configured_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Place dated journals under the configured NoteDiscovery folder."""
+    monkeypatch.setattr(journal, "JOURNAL_FOLDER", "Personal/Journal")
+
+    assert journal.journal_path_for_date(date(2024, 12, 31)) == (
+        "Personal/Journal/2024/12/2024-12-31.md"
+    )
+
+
 def test_journal_entry_marker_is_stable_and_content_keeps_raw_transcript() -> None:
     """Identify a persisted transcript without rewriting or altering its text."""
     note_id = uuid4()

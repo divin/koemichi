@@ -17,11 +17,15 @@ from koemichi.shared.notifications import (
     enqueue_notification,
     journal_draft_notification,
 )
-from koemichi.shared.settings import NOTEDISCOVERY_API_URL, TIMEZONE
+from koemichi.shared.settings import (
+    NOTEDISCOVERY_API_URL,
+    NOTEDISCOVERY_JOURNAL_FOLDER,
+    TIMEZONE,
+)
 
 logger = logging.getLogger(__name__)
 columns = cast(Any, Note).__table__.c
-JOURNAL_FOLDER = "Journal"
+JOURNAL_FOLDER = NOTEDISCOVERY_JOURNAL_FOLDER
 
 
 class JournalNoteClient(Protocol):

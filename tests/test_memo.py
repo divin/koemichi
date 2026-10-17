@@ -94,6 +94,15 @@ def test_memo_path_uses_readable_title_and_sanitizes_path_separators() -> None:
     assert memo.safe_descriptive_title("東京") == "東京"
 
 
+def test_memo_path_uses_configured_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Place new memos under the configured NoteDiscovery folder."""
+    monkeypatch.setattr(memo, "MEMO_FOLDER", "Personal/Notes")
+
+    assert memo.memo_note_path(1_735_689_600_000, "Bakery", ZoneInfo("UTC")) == (
+        "Personal/Notes/2025-01-01 00:00 - Bakery.md"
+    )
+
+
 @pytest.mark.asyncio
 async def test_path_selection_adds_numeric_suffixes() -> None:
     """Choose the first readable timestamped path not already in the vault."""

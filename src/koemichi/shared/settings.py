@@ -16,6 +16,10 @@ DATABASE_PATH: Path = Path(os.getenv("DATABASE_PATH") or DATA_DIR / "koemichi.db
 
 TRANSCRIPT_INGEST_TOKEN: str | None = os.getenv("TRANSCRIPT_INGEST_TOKEN") or None
 NOTEDISCOVERY_API_URL: str | None = os.getenv("NOTEDISCOVERY_API_URL") or None
+NOTEDISCOVERY_MEMO_FOLDER: str = os.getenv("NOTEDISCOVERY_MEMO_FOLDER") or "Memo"
+NOTEDISCOVERY_JOURNAL_FOLDER: str = (
+    os.getenv("NOTEDISCOVERY_JOURNAL_FOLDER") or "Journal"
+)
 
 # Vikunja inbox used by the todo workflow and its MCP tools.
 VIKUNJA_API_URL: str | None = os.getenv("VIKUNJA_API_URL") or None

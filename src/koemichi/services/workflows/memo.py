@@ -25,12 +25,13 @@ from koemichi.shared.settings import (
     LLM_MODEL_NAME,
     LLM_URL,
     NOTEDISCOVERY_API_URL,
+    NOTEDISCOVERY_MEMO_FOLDER,
     TIMEZONE,
 )
 
 logger = logging.getLogger(__name__)
 columns = cast(Any, Note).__table__.c
-MEMO_FOLDER = "Memo"
+MEMO_FOLDER = NOTEDISCOVERY_MEMO_FOLDER
 MAX_TITLE_LENGTH = 120
 MEMO_SYSTEM_PROMPT = (
     "Extract only a short, descriptive title for this voice transcript. "
@@ -199,7 +200,7 @@ async def handle_memo(note: Note) -> None:
 
     assert note.memo_path is not None
     assert note.memo_content is not None
-    await client.create_folder(MEMO_FOLDER)
+    await client.create_folder(note.memo_path.rsplit("/", maxsplit=1)[0])
     logger.info("Memo folder ensured for note %s", note.id)
     await client.create_or_update_note(note.memo_path, note.memo_content)
     logger.info("Memo saved to NoteDiscovery for note %s", note.id)

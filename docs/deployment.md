@@ -51,6 +51,8 @@ If another container sends requests, `127.0.0.1` on the host is not reachable fr
 |---|---|---|
 | `TRANSCRIPT_INGEST_TOKEN` | Optional | Bearer token for `POST /transcripts`; unset disables authentication. |
 | `NOTEDISCOVERY_API_URL` | Yes for startup/workflows | NoteDiscovery base URL reachable by the worker. |
+| `NOTEDISCOVERY_MEMO_FOLDER` | No | Vault-relative destination folder for Memo notes; defaults to `Memo`. |
+| `NOTEDISCOVERY_JOURNAL_FOLDER` | No | Vault-relative root folder for dated Journal notes; defaults to `Journal`. |
 | `VIKUNJA_API_URL` | Yes for startup/workflows | Vikunja origin reachable by the worker. |
 | `VIKUNJA_API_TOKEN` | Yes for startup/workflows | Vikunja `tk_...` API token with `mcp:access` scope. |
 | `VIKUNJA_PROJECT_ID` | Yes for startup/workflows | Numeric id of the inbox project todos are added to. |

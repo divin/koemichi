@@ -21,7 +21,7 @@ Only intents with a registered Python handler are implemented. Currently those a
 
 The specialist extracts only a short descriptive title, preserving the transcript's language. Koemichi keeps the transcript itself as the note body without AI rewriting or summarization.
 
-The note title and filename use the recording's local date and zero-padded time in `TZ`, followed by the descriptive title; for example:
+The note title and filename use the recording's local date and zero-padded time in `TZ`, followed by the descriptive title. The vault-relative destination folder defaults to `Memo` and can be set with `NOTEDISCOVERY_MEMO_FOLDER`; for example:
 
 ```text
 Memo/2025-01-01 14:30 - Meeting with Alice.md
@@ -31,13 +31,13 @@ Python sanitizes path separators in the title, checks for collisions, and adds a
 
 ### Journal
 
-Journal entries are raw transcript text; no AI specialist rewrites them. The recording's local date in `TZ` selects `Journal/YYYY/MM/YYYY-MM-DD.md`. Koemichi creates the dated file when it does not exist and appends each new transcript to the same day's file.
+Journal entries are raw transcript text; no AI specialist rewrites them. The recording's local date in `TZ` selects `<journal-folder>/YYYY/MM/YYYY-MM-DD.md`; the vault-relative root defaults to `Journal` and can be set with `NOTEDISCOVERY_JOURNAL_FOLDER`. Koemichi creates the dated file when it does not exist and appends each new transcript to the same day's file.
 
 Each append carries a hidden, stable marker derived from the transcript's note ID. On retry, Koemichi checks for that marker before appending, so a timeout after a successful API write does not duplicate the entry. Existing journal content is preserved.
 
 ## Deterministic behavior and retries
 
-Python selects dates and paths, ensures folders, persists memo titles/content and journal transcripts/destinations before external writes, and performs NoteDiscovery API operations. Memo retries reuse the saved title, content, and path. Journal retries reuse the saved transcript and path, and the stable entry marker prevents duplicate appends.
+Python selects dates and paths, ensures folders, persists memo titles/content and journal transcripts/destinations before external writes, and performs NoteDiscovery API operations. Memo retries reuse the saved title, content, and path. Journal retries reuse the saved transcript and path, and the stable entry marker prevents duplicate appends. Changing either folder setting affects new destinations only; it does not move existing notes, and retries continue using their persisted paths.
 
 ### Todo
 

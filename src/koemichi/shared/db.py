@@ -1,18 +1,31 @@
 """SQLite engine, sessions, and initial table creation."""
 
+import logging
+import time
 from collections.abc import Generator
 
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
 
 from koemichi.shared.models.note import Note  # noqa: F401
 from koemichi.shared.models.notification import NotificationOutbox  # noqa: F401
 from koemichi.shared.settings import DATABASE_PATH
 
+logger = logging.getLogger(__name__)
+
 engine = create_engine(
     f"sqlite:///{DATABASE_PATH}",
     connect_args={"check_same_thread": False, "timeout": 30},
 )
+
+# ``PRAGMA journal_mode=WAL`` requires an exclusive lock and returns
+# SQLITE_BUSY immediately -- ignoring the busy timeout -- while another
+# connection holds a schema lock. Compose starts the receiver and worker
+# together, and both call ``create_db_and_tables()`` on the same database,
+# so the WAL switch retries until the peer's initialization commits.
+WAL_RETRY_ATTEMPTS = 100
+WAL_RETRY_DELAY_SECONDS = 0.05
 
 
 def create_db_and_tables() -> None:
@@ -30,8 +43,34 @@ def create_db_and_tables() -> None:
             connection.rollback()
             raise
 
-    with engine.connect() as connection:
-        connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+    _enable_write_ahead_logging()
+
+
+def _enable_write_ahead_logging() -> None:
+    """Switch SQLite to WAL mode, retrying while a peer holds the schema lock.
+
+    ``PRAGMA journal_mode=WAL`` needs an exclusive lock; if another process
+    or thread is mid-initialization inside ``BEGIN IMMEDIATE`` it returns
+    ``SQLITE_BUSY`` right away (the busy timeout does not apply). Retry with
+    a short delay so concurrent Compose startup converges, and fail fast on
+    any lock-independent error.
+    """
+    last_error: OperationalError | None = None
+    for attempt in range(WAL_RETRY_ATTEMPTS):
+        try:
+            with engine.connect() as connection:
+                connection.exec_driver_sql("PRAGMA journal_mode=WAL")
+            return
+        except OperationalError as exc:
+            if "locked" not in str(exc):
+                raise
+            last_error = exc
+            if attempt + 1 < WAL_RETRY_ATTEMPTS:
+                time.sleep(WAL_RETRY_DELAY_SECONDS)
+    logger.error(
+        "SQLite WAL mode could not be enabled after %s attempts", WAL_RETRY_ATTEMPTS
+    )
+    raise RuntimeError("SQLite WAL mode could not be enabled") from last_error
 
 
 def _add_missing_note_columns(connection: Connection) -> None:

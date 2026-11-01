@@ -37,12 +37,12 @@ Each append carries a hidden, stable marker derived from the transcript's note I
 
 ## Deterministic behavior and retries
 
-Python selects dates and paths, ensures folders, persists memo titles/content and journal transcripts/destinations before external writes, and performs NoteDiscovery API operations. Memo retries reuse the saved title, content, and path. Journal retries reuse the saved transcript and path, and the stable entry marker prevents duplicate appends. Changing either folder setting affects new destinations only; it does not move existing notes, and retries continue using their persisted paths.
+Python selects dates and paths, ensures folders, persists memo titles/content, journal transcripts/destinations, and todo titles before external writes, and performs the NoteDiscovery and Vikunja operations. Memo retries reuse the saved title, content, and path. Journal retries reuse the saved transcript and path, and the stable entry marker prevents duplicate appends. Todo retries reuse the saved transcript title. Changing either folder setting affects new destinations only; it does not move existing notes, and retries continue using their persisted paths.
 
 ### Todo
 
-A PydanticAI specialist extracts a task title, an optional description, and an optional due date, then creates the task in the dedicated Vikunja inbox via Vikunja's built-in MCP server. The specialist is the only component that writes: it is given the `add_task` MCP tool. It sets a due date only when the transcript explicitly states a concrete date and never infers one such as "tomorrow" or "next week".
+Todo creation does not use an LLM. Koemichi trims only leading and trailing whitespace from the raw transcript, persists it as the Vikunja task title, and sends it directly through the configured Vikunja client. It does not generate a separate description or due date.
 
-Application code stays deterministic around the write: it validates the Vikunja configuration, persists the extracted task draft under the worker lease, and lists the inbox project to verify an equivalent task is not already present before the agent's write is relied on or completed. A task that is already present in the inbox is never created again, which also makes retries idempotent after a crash between the agent's write and the draft persistence.
+The workflow validates the Vikunja configuration, persists the title under the worker lease, and lists the inbox project to check whether an equivalent title already exists before creating a task. This duplicate check and the saved title make retries safe after a crash around the Vikunja write. Older in-flight tasks with an already-persisted draft continue using that saved draft.
 
-Todo retries reuse the persisted task draft instead of re-extracting. Temporary failures are retried; exhausted retries and unimplemented intents are marked as errors. `dispatched` means the selected Python workflow completed.
+Temporary failures are retried; exhausted retries and unimplemented intents are marked as errors. `dispatched` means the selected Python workflow completed.

@@ -17,7 +17,7 @@ flowchart LR
     D --> H[Pushover outbox]
 ```
 
-The receiver stores transcripts; a separate worker classifies and processes them. Work and notifications are persisted in SQLite and retried as needed. I use NoteDiscovery for my notes. I added read-only search, list, and fetch capabilities so compatible language-model clients can consult the existing vault; deterministic Python workflows still choose paths and handle all writes. The memo specialist extracts only a title; memo bodies and journal entries preserve the raw transcript. The todo specialist creates tasks in my Vikunja inbox through Vikunja's built-in MCP server.
+The receiver stores transcripts; a separate worker classifies and processes them. Work and notifications are persisted in SQLite and retried as needed. I use NoteDiscovery for my notes. I added read-only search, list, and fetch capabilities so compatible language-model clients can consult the existing vault; deterministic Python workflows still choose paths and handle all writes. The memo specialist extracts only a title; memo bodies and journal entries preserve the raw transcript. Todo workflows send the raw transcript as the task title to my Vikunja inbox, without an LLM-based extraction step.
 
 ## 🚀 Quick start
 
@@ -45,7 +45,7 @@ The example Compose file maps host port `8001` to container port `8000` on all h
 
 ## 🧠 Intent workflows
 
-Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo, Journal, and Todo have Python workflows; Research is recognized but not implemented and fails explicitly. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day; Todo tasks are added to the configured Vikunja inbox via Vikunja's built-in MCP server. See [classification and workflows](docs/workflows.md).
+Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo, Journal, and Todo have Python workflows; Research is recognized but not implemented and fails explicitly. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day; Todo tasks use the raw transcript as the title and are added to the configured Vikunja inbox without an LLM workflow call. See [classification and workflows](docs/workflows.md).
 
 ## 🔔 Notifications
 

@@ -4,11 +4,8 @@ import os
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from types import SimpleNamespace
 from uuid import uuid4
 
-os.environ.setdefault("LLM_URL", "http://localhost:8080/v1")
-os.environ.setdefault("LLM_MODEL_NAME", "test-model")
 os.environ.setdefault("NOTIFICATION_MODE", "off")
 
 import pytest
@@ -48,39 +45,6 @@ def _note(transcript: str = "Todo: buy milk at the corner shop by Friday.") -> N
         transcript=transcript,
         intent="todo",
     )
-
-
-def test_todo_prompt_requires_explicit_due_date_only() -> None:
-    """Keep the specialist from inventing deadlines or task facts."""
-    prompt = todo.TODO_SYSTEM_PROMPT.lower()
-
-    assert "only when the transcript explicitly states" in prompt
-    assert "never infer, compute, or guess a due date" in prompt
-    assert "list_tasks" in prompt
-    assert "add_task" in prompt
-
-
-def test_task_draft_rejects_empty_or_extra_output() -> None:
-    """Validate the three fields the todo specialist is allowed to return."""
-    with pytest.raises(ValueError):
-        todo.TaskDraft.model_validate({"title": "  "})
-    with pytest.raises(ValueError):
-        todo.TaskDraft.model_validate({"title": "Buy milk", "project_id": 7})
-
-
-def test_task_draft_normalizes_and_validates_due_date() -> None:
-    """Accept concrete ISO dates and reject vague or invalid deadlines."""
-    draft = todo.TaskDraft.model_validate(
-        {
-            "title": "Buy milk",
-            "description": "At the corner shop",
-            "due_date": "2026-03-14",
-        }
-    )
-    assert draft.due_date == "2026-03-14T00:00:00Z"
-
-    with pytest.raises(ValueError, match="due_date"):
-        todo.TaskDraft.model_validate({"title": "Buy milk", "due_date": "tomorrow"})
 
 
 def test_task_title_key_normalizes_titles_for_duplicate_check() -> None:
@@ -140,29 +104,21 @@ async def test_task_title_exists_full_walk_without_match() -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_todo_persists_draft_and_creates_task(
+async def test_handle_todo_persists_transcript_as_title_and_creates_task(
     database_engine: Engine,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Let the agent define the task, then persist before writing to Vikunja."""
-    raw_transcript = "  Todo: buy milk at the corner shop  "
+    """Use the trimmed raw transcript as title and persist it before writing."""
+    raw_transcript = (
+        "  Please call the dentist tomorrow.\nAsk for an appointment before work.  "
+    )
+    title = raw_transcript.strip()
     note = _note(transcript=raw_transcript)
     with Session(database_engine) as session:
         session.add(note)
         session.commit()
         session.refresh(note)
-
-    class FakeAgent:
-        async def run(self, transcript: str) -> SimpleNamespace:
-            assert transcript == raw_transcript.strip()
-            return SimpleNamespace(
-                output=todo.TaskDraft(
-                    title="Buy milk",
-                    description="At the corner shop",
-                    due_date="2026-03-14",
-                )
-            )
 
     calls: list[tuple[object, ...]] = []
 
@@ -183,7 +139,6 @@ async def test_handle_todo_persists_draft_and_creates_task(
             calls.append(("add", title, description, due_date))
             return {"id": 99, "title": title}
 
-    monkeypatch.setattr(todo, "_get_todo_agent", lambda: FakeAgent())  # type: ignore[assignment]
     monkeypatch.setattr(todo, "get_configured_client", lambda: FakeClient())
     monkeypatch.setattr(todo, "validate_todo_config", lambda: None)
 
@@ -192,21 +147,21 @@ async def test_handle_todo_persists_draft_and_creates_task(
     with Session(database_engine) as session:
         saved = session.get(Note, note.id)
     assert saved is not None
-    assert saved.todo_title == "Buy milk"
-    assert saved.todo_description == "At the corner shop"
-    assert saved.todo_due_date == "2026-03-14T00:00:00Z"
+    assert saved.todo_title == title
+    assert saved.todo_description is None
+    assert saved.todo_due_date is None
     assert calls == [
         ("list", 1),
-        ("add", "Buy milk", "At the corner shop", "2026-03-14T00:00:00Z"),
+        ("add", title, None, None),
     ]
     assert raw_transcript not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_retry_reuses_persisted_draft_without_agent_or_create(
+async def test_retry_reuses_persisted_title_without_create(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Retries reuse the persisted task and never create or extract again."""
+    """Retries reuse the persisted title and skip a task already in the inbox."""
     note = _note()
     note.todo_title = "Buy milk"
     note.todo_description = None
@@ -235,10 +190,6 @@ async def test_retry_reuses_persisted_draft_without_agent_or_create(
         ) -> dict[str, object]:
             raise AssertionError("retry must not create an existing task")
 
-    def unexpected_agent() -> object:
-        raise AssertionError("retry must not re-run the todo specialist")
-
-    monkeypatch.setattr(todo, "_get_todo_agent", unexpected_agent)
     monkeypatch.setattr(todo, "get_configured_client", lambda: FakeClient())
     monkeypatch.setattr(todo, "validate_todo_config", lambda: None)
 
@@ -249,7 +200,7 @@ async def test_retry_reuses_persisted_draft_without_agent_or_create(
 async def test_handle_todo_creates_when_persisted_task_is_missing(
     database_engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A draft whose task never landed in Vikunja is created on the next retry."""
+    """A persisted task title missing from Vikunja is created on retry."""
     note = _note()
     note.todo_title = "Pay rent"
     note.todo_description = "End of the month"
@@ -276,10 +227,6 @@ async def test_handle_todo_creates_when_persisted_task_is_missing(
             added.append((title, description, due_date))
             return {"id": 7, "title": title}
 
-    def unexpected_agent() -> object:
-        raise AssertionError("retry must not re-run the todo specialist")
-
-    monkeypatch.setattr(todo, "_get_todo_agent", unexpected_agent)
     monkeypatch.setattr(todo, "get_configured_client", lambda: FakeClient())
     monkeypatch.setattr(todo, "validate_todo_config", lambda: None)
 
@@ -291,7 +238,7 @@ async def test_handle_todo_creates_when_persisted_task_is_missing(
 def test_persist_todo_draft_requires_current_worker_lease(
     database_engine: Engine,
 ) -> None:
-    """Do not persist the extracted task after the worker lease has gone stale."""
+    """Do not persist the transcript title after the worker lease goes stale."""
     note = _note()
     with Session(database_engine) as session:
         session.add(note)
@@ -300,4 +247,4 @@ def test_persist_todo_draft_requires_current_worker_lease(
 
     note.lease_expires_at = datetime(2025, 1, 2, tzinfo=UTC)
     with pytest.raises(RuntimeError, match="lease may be stale"):
-        todo.persist_todo_draft(note, todo.TaskDraft(title="Buy milk"))
+        todo.persist_todo_draft(note, "Buy milk")

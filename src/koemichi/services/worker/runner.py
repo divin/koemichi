@@ -17,6 +17,10 @@ from koemichi.services.router.execution import (
 from koemichi.services.router.intents import Intent
 from koemichi.services.workflows.journal import handle_journal, validate_journal_config
 from koemichi.services.workflows.memo import handle_memo, validate_memo_config
+from koemichi.services.workflows.research import (
+    handle_research,
+    validate_research_config,
+)
 from koemichi.services.workflows.todo import handle_todo, validate_todo_config
 from koemichi.shared.db import close_db, create_db_and_tables
 from koemichi.shared.models.note import NoteStatus
@@ -46,6 +50,7 @@ POLL_INTERVAL_SECONDS = 1
 register_intent_handler(Intent.MEMO, handle_memo)
 register_intent_handler(Intent.JOURNAL, handle_journal)
 register_intent_handler(Intent.TODO, handle_todo)
+register_intent_handler(Intent.RESEARCH, handle_research)
 
 
 def _utc_now() -> datetime:
@@ -95,8 +100,8 @@ async def process_next_note(now: datetime | None = None) -> bool:
                     note.intent,
                     note.classification_method,
                     note.classification_confidence,
-                    note.memo_path or note.journal_path,
-                    note.memo_content or note.journal_content,
+                    note.research_path or note.memo_path or note.journal_path,
+                    note.research_content or note.memo_content or note.journal_content,
                     note.todo_title,
                 ),
                 status=NoteStatus.DISPATCHED,
@@ -194,6 +199,7 @@ async def run_worker() -> None:
     validate_memo_config()
     validate_journal_config()
     validate_todo_config()
+    validate_research_config()
     validate_notification_config()
     logger.info("Koemichi routing worker started (notifications=%s)", NOTIFICATION_MODE)
     try:

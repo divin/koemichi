@@ -85,6 +85,9 @@ def _add_missing_note_columns(connection: Connection) -> None:
         "todo_title",
         "todo_description",
         "todo_due_date",
+        "research_title",
+        "research_content",
+        "research_path",
     ):
         if name not in existing:
             connection.exec_driver_sql(f"ALTER TABLE note ADD COLUMN {name} TEXT")

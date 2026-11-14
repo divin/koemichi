@@ -32,7 +32,8 @@ Do the same for a custom `HOST_DATA_DIR`. Keep the SQLite database on a local fi
 The worker needs:
 
 - `NOTEDISCOVERY_API_URL`: a NoteDiscovery base URL reachable from the worker.
-- `LLM_URL` and `LLM_MODEL_NAME`: an OpenAI-compatible model endpoint and the model ID it serves. Both must be configured even though keyword matches avoid a model request.
+- `LLM_URL` and `LLM_MODEL_NAME`: an OpenAI-compatible model endpoint and the model ID it serves. Both must be configured even though keyword matches avoid a model request. The research workflow uses the same endpoint for its bounded search agent, so the model must support tool calling.
+- `SAGASHI_MCP_URL`: a Sagashi MCP server URL reachable from the worker (for example `http://host.docker.internal:9092/mcp`), used by the research workflow's read-only search tools.
 - `VIKUNJA_API_URL`, `VIKUNJA_API_TOKEN`, and `VIKUNJA_PROJECT_ID`: Vikunja origin, a `tk_...` API token with the `mcp:access` scope, and the numeric id of the dedicated inbox project for voice-captured todos. `VIKUNJA_MCP_URL` optionally overrides the MCP endpoint (defaults to `${VIKUNJA_API_URL}/api/v2/mcp`); it is forwarded to the worker container.
 
 The Vikunja host must resolve from **inside the worker container**. The worker connects to Vikunja's built-in streamable-HTTP MCP server (`/api/v2/mcp`), so use an address the container can resolve and route to: a LAN IP (like the NoteDiscovery example below), a shared Docker network service name, or `host.docker.internal` when Vikunja runs on the host. A hostname only resolvable on the host machine will fail in the worker with `Temporary failure in name resolution`; the worker logs the resolved endpoint at startup as `Connecting to Vikunja MCP endpoint ...`.
@@ -53,6 +54,10 @@ If another container sends requests, `127.0.0.1` on the host is not reachable fr
 | `NOTEDISCOVERY_API_URL` | Yes for startup/workflows | NoteDiscovery base URL reachable by the worker. |
 | `NOTEDISCOVERY_MEMO_FOLDER` | No | Vault-relative destination folder for Memo notes; defaults to `Memo`. |
 | `NOTEDISCOVERY_JOURNAL_FOLDER` | No | Vault-relative root folder for dated Journal notes; defaults to `Journal`. |
+| `NOTEDISCOVERY_RESEARCH_FOLDER` | No | Vault-relative destination folder for Research notes; defaults to `Research`. |
+| `SAGASHI_MCP_URL` | Yes for research | Sagashi MCP server URL reachable by the worker; used by the research workflow. |
+| `RESEARCH_MAX_TOOL_CALLS` | No | Soft tool-call budget per research run; defaults to `10`. |
+| `RESEARCH_TIMEOUT_SECONDS` | No | Wall-clock timeout per research run; defaults to `300`. |
 | `VIKUNJA_API_URL` | Yes for startup/workflows | Vikunja origin reachable by the worker. |
 | `VIKUNJA_API_TOKEN` | Yes for startup/workflows | Vikunja `tk_...` API token with `mcp:access` scope. |
 | `VIKUNJA_PROJECT_ID` | Yes for startup/workflows | Numeric id of the inbox project todos are added to. |

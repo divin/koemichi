@@ -13,7 +13,9 @@ flowchart LR
     C --> D[Worker]
     D --> E[Keyword match or LLM classification]
     E --> F[Python intent workflow]
+    F[Python intent workflow]
     F --> G[NoteDiscovery / Vikunja]
+    F -.->|research| S[Sagashi search]
     D --> H[Pushover outbox]
 ```
 
@@ -45,7 +47,7 @@ The example Compose file maps host port `8001` to container port `8000` on all h
 
 ## 🧠 Intent workflows
 
-Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. Memo, Journal, and Todo have Python workflows; Research is recognized but not implemented and fails explicitly. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day; Todo tasks use the raw transcript as the title and are added to the configured Vikunja inbox without an LLM workflow call. See [classification and workflows](docs/workflows.md).
+Koemichi first checks transcript-opening keywords, then uses an OpenAI-compatible LLM if no keyword matches. All four intents have Python workflows. Memo notes keep the raw transcript under a short descriptive title; Journal transcripts are appended to the file for their recording day; Todo tasks use the raw transcript as the title and are added to the configured Vikunja inbox without an LLM workflow call; Research runs a bounded local-LLM agent over the Sagashi search tools and saves a cited summary note. See [classification and workflows](docs/workflows.md).
 
 ## 🔔 Notifications
 

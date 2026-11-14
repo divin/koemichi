@@ -194,6 +194,8 @@ def dispatched_notification(
         if intent == "journal"
         else "Todo"
         if intent == "todo"
+        else "Research"
+        if intent == "research"
         else intent
     )
     if todo_title:
@@ -239,6 +241,16 @@ def todo_draft_notification(note_id: UUID) -> NotificationDraft:
     return NotificationDraft(
         event_key=f"{note_id}:todo-draft",
         message=f"Todo draft prepared [{_short_id(note_id)}].",
+        priority=-1,
+        debug_only=True,
+    )
+
+
+def research_draft_notification(note_id: UUID) -> NotificationDraft:
+    """Build a debug-only event after a research draft is durably persisted."""
+    return NotificationDraft(
+        event_key=f"{note_id}:research-draft",
+        message=f"Research draft prepared [{_short_id(note_id)}].",
         priority=-1,
         debug_only=True,
     )

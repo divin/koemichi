@@ -154,6 +154,7 @@ activemq-data/
 # Environments and runtime data
 /data/
 .env
+.env.test
 .envrc
 .venv
 env/

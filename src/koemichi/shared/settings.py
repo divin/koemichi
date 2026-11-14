@@ -20,6 +20,9 @@ NOTEDISCOVERY_MEMO_FOLDER: str = os.getenv("NOTEDISCOVERY_MEMO_FOLDER") or "Memo
 NOTEDISCOVERY_JOURNAL_FOLDER: str = (
     os.getenv("NOTEDISCOVERY_JOURNAL_FOLDER") or "Journal"
 )
+NOTEDISCOVERY_RESEARCH_FOLDER: str = (
+    os.getenv("NOTEDISCOVERY_RESEARCH_FOLDER") or "Research"
+)
 
 # Vikunja inbox used by the todo workflow and its MCP tools.
 VIKUNJA_API_URL: str | None = os.getenv("VIKUNJA_API_URL") or None
@@ -37,6 +40,14 @@ TIMEZONE = ZoneInfo(os.getenv("TZ") or "Europe/Berlin")
 # Local LLM endpoint for intent classification, if keyword matching does not apply.
 LLM_URL: str | None = os.getenv("LLM_URL")
 LLM_MODEL_NAME: str | None = os.getenv("LLM_MODEL_NAME")
+
+# Sagashi MCP server used by the research workflow's read-only search tools.
+SAGASHI_MCP_URL: str | None = os.getenv("SAGASHI_MCP_URL") or None
+
+# Bounded research agent loop: soft tool-call budget (the agent is asked to
+# finalize its summary once spent) and a hard wall-clock timeout per run.
+RESEARCH_MAX_TOOL_CALLS: int = int(os.getenv("RESEARCH_MAX_TOOL_CALLS") or 10)
+RESEARCH_TIMEOUT_SECONDS: int = int(os.getenv("RESEARCH_TIMEOUT_SECONDS") or 300)
 
 PUSHOVER_API_TOKEN: str | None = os.getenv("PUSHOVER_API_TOKEN") or None
 PUSHOVER_USER_KEY: str | None = os.getenv("PUSHOVER_USER_KEY") or None
